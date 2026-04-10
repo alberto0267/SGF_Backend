@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - api
+  - api-e2e
+  - worker
+  - worker-e2e
+  - shared
+
