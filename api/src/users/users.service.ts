@@ -25,6 +25,10 @@ export class UsersService {
     private readonly auditService: AuditService,
   ) {}
 
+  async findAll() {
+    return this.userRepo.findAll();
+  }
+
   async create(
     role: 'Manager' | 'Employee',
     dto: CreateMemberDto,

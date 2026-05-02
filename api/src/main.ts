@@ -1,8 +1,19 @@
 import 'reflect-metadata';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Logger, ValidationPipe } from '@nestjs/common';
+import type { ValidationError } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app/app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+
+function flattenValidationErrors(errors: ValidationError[], parentPath = ''): { field: string; message: string }[] {
+  return errors.flatMap((error) => {
+    const field = parentPath ? `${parentPath}.${error.property}` : error.property;
+    const messages = Object.values(error.constraints ?? {}).map((message) => ({ field, message }));
+    const childMessages = error.children?.length ? flattenValidationErrors(error.children, field) : [];
+    return [...messages, ...childMessages];
+  });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,11 +23,21 @@ async function bootstrap() {
 
   app.use(helmet());
 
+  app.useGlobalFilters(new HttpExceptionFilter());
+
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            // elimina propiedades no declaradas en el DTO
-      forbidNonWhitelisted: true, // lanza error si llegan props extra
-      transform: true,            // necesario para @Type() en DTOs anidados
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      exceptionFactory: (errors) => {
+        const allErrors = flattenValidationErrors(errors);
+        return new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: allErrors[0]?.message ?? 'Error de validación.',
+          errors: allErrors,
+        });
+      },
     }),
   );
 

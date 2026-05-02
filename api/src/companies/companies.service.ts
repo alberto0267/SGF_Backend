@@ -17,6 +17,15 @@ export class CompaniesService {
     private readonly companyRepo: CompanyRepository,
   ) {}
 
+  async findAllForSelect(filters: { name?: string; nif?: string }) {
+    return this.companyRepo.findAllForSelect(filters);
+  }
+
+  async findAll(filters: { name?: string; nif?: string; page: number; limit: number }) {
+    const { data, total } = await this.companyRepo.findAll(filters);
+    return { data, total, page: filters.page, limit: filters.limit, totalPages: Math.ceil(total / filters.limit) };
+  }
+
   async create(dto: CreateCompanyDto, actorId: number, ip: string, source: 'web' | 'app') {
     return this.db.transaction(async (query) => {
       // ─── Validaciones de unicidad ──────────────────────────────────────────

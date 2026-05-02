@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { extractIp, extractSource } from '../common/request.helpers';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
+import { QueryCompanyDto } from './dto/query-company.dto';
 import { UpdateCompanyDto, UpdateCompanyActiveDto } from './dto/update-company.dto';
 
 @Controller('companies')
@@ -14,6 +15,16 @@ import { UpdateCompanyDto, UpdateCompanyActiveDto } from './dto/update-company.d
 @Roles('SuperAdmin')
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
+
+  @Get('select')
+  findAllForSelect(@Query() query: QueryCompanyDto) {
+    return this.companiesService.findAllForSelect({ name: query.name, nif: query.nif });
+  }
+
+  @Get()
+  findAll(@Query() query: QueryCompanyDto) {
+    return this.companiesService.findAll({ name: query.name, nif: query.nif, page: query.page ?? 1, limit: query.limit ?? 20 });
+  }
 
   @Post('create-company')
   @HttpCode(HttpStatus.CREATED)

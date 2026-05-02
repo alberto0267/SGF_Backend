@@ -74,8 +74,9 @@ export class ThrottleLoginGuard implements CanActivate {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          code: 'RATE_LIMITED',
           message: 'Demasiados intentos. Inténtalo más tarde.',
-          captchaRequired: true, // ← el frontend detecta este flag para mostrar CAPTCHA
+          captchaRequired: true,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
@@ -90,6 +91,7 @@ export class ThrottleLoginGuard implements CanActivate {
         throw new HttpException(
           {
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            code: 'RATE_LIMITED',
             message: 'Demasiados intentos para esta cuenta. Inténtalo más tarde.',
           },
           HttpStatus.TOO_MANY_REQUESTS,

@@ -7,8 +7,8 @@ type QueryRunner = <R = any>(sql: string, params?: any[]) => Promise<R>;
 export interface CreateWorkcenterData {
   uuid: string;
   name: string;
-  address: string;
-  email: string;
+  address?: string;
+  email?: string;
   companyId: number;
 }
 
@@ -33,5 +33,71 @@ export class WorkcenterRepository {
   async findByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; company_id: number } | null> {
     const rows = await this.run<RowDataPacket[]>(q, 'SELECT id, company_id FROM workcenters WHERE uuid = ?', [uuid]);
     return (rows[0] as { id: number; company_id: number }) ?? null;
+  }
+
+  async findAll(filters: { name?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+    const where: string[] = [];
+    const params: unknown[] = [];
+
+    if (filters.name) {
+      where.push('w.name LIKE ?');
+      params.push(`%${filters.name}%`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const offset = (filters.page - 1) * filters.limit;
+
+    const [data, countRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT w.uuid, w.name, w.address, w.email, w.active, w.created_at,
+                c.name AS company, c.uuid AS company_uuid,
+                COUNT(uw.user_id) AS worker_count
+         FROM workcenters w
+         JOIN companies c ON c.id = w.company_id
+         LEFT JOIN user_workcenters uw ON uw.workcenter_id = w.id
+         ${whereClause}
+         GROUP BY w.id
+         ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
+        [...params, filters.limit, offset],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS total FROM workcenters w ${whereClause}`,
+        params,
+      ),
+    ]);
+
+    return { data, total: countRows[0]['total'] as number };
+  }
+
+  async findAllByCompany(companyId: number, filters: { name?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+    const where: string[] = ['w.company_id = ?'];
+    const params: unknown[] = [companyId];
+
+    if (filters.name) {
+      where.push('w.name LIKE ?');
+      params.push(`%${filters.name}%`);
+    }
+
+    const whereClause = `WHERE ${where.join(' AND ')}`;
+    const offset = (filters.page - 1) * filters.limit;
+
+    const [data, countRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT w.uuid, w.name, w.address, w.email, w.active, w.created_at,
+                COUNT(uw.user_id) AS worker_count
+         FROM workcenters w
+         LEFT JOIN user_workcenters uw ON uw.workcenter_id = w.id
+         ${whereClause}
+         GROUP BY w.id
+         ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
+        [...params, filters.limit, offset],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS total FROM workcenters w ${whereClause}`,
+        params,
+      ),
+    ]);
+
+    return { data, total: countRows[0]['total'] as number };
   }
 }

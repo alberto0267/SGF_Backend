@@ -28,18 +28,18 @@ export class AuthService {
     if (!user) {
       await bcrypt.compare(dto.password, DUMMY_HASH);
       await this.auditService.log({ entityType: 'auth', action: 'login', source, ip, status: 'failed', errorMessage: 'Email no encontrado' });
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Credenciales inválidas' });
     }
 
     if (!user.active) {
       await bcrypt.compare(dto.password, DUMMY_HASH);
       await this.auditService.log({ actorId: user.id, entityType: 'auth', action: 'login', source, ip, status: 'failed', errorMessage: 'Usuario inactivo' });
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Credenciales inválidas' });
     }
 
     if (user.locked_until && user.locked_until > new Date()) {
       await this.auditService.log({ actorId: user.id, entityType: 'auth', action: 'login', source, ip, status: 'failed', errorMessage: 'Cuenta bloqueada' });
-      throw new UnauthorizedException('Cuenta bloqueada temporalmente. Inténtalo más tarde.');
+      throw new UnauthorizedException({ code: 'ACCOUNT_LOCKED', message: 'Cuenta bloqueada temporalmente. Inténtalo más tarde.' });
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.password);
@@ -47,7 +47,7 @@ export class AuthService {
     if (!passwordValid) {
       await this.handleFailedAttempt(user);
       await this.auditService.log({ actorId: user.id, entityType: 'auth', action: 'login', source, ip, status: 'failed', errorMessage: 'Contraseña incorrecta' });
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Credenciales inválidas' });
     }
 
     await this.userRepo.resetFailedAttempts(user.id);
@@ -56,21 +56,23 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
-  async refresh(refreshToken: string): Promise<Pick<AuthResponse, 'accessToken' | 'expiresIn'>> {
+  async refresh(refreshToken: string): Promise<AuthResponse> {
     const tokenHash = this.hashToken(refreshToken);
     const user = await this.userRepo.findByRefreshToken(tokenHash);
 
     if (!user) {
-      throw new UnauthorizedException('Refresh token inválido o expirado');
+      throw new UnauthorizedException({ code: 'INVALID_TOKEN', message: 'Refresh token inválido o expirado.' });
     }
 
     await this.userRepo.revokeRefreshToken(tokenHash);
-    await this.saveRefreshToken(user.id, refreshToken);
+
+    const newRefreshToken = crypto.randomBytes(32).toString('hex');
+    await this.saveRefreshToken(user.id, newRefreshToken);
 
     const payload: JwtPayload = { sub: user.uuid, id: user.id, email: user.email, role: user.role_name };
     const accessToken = this.jwt.sign(payload);
 
-    return { accessToken, expiresIn: Number(process.env.JWT_EXPIRES_IN) || 900 };
+    return { accessToken, refreshToken: newRefreshToken, expiresIn: Number(process.env.JWT_EXPIRES_IN) || 900 };
   }
 
   async logoutByUuid(uuid: string, actorId: number, ip: string, source: 'web' | 'app'): Promise<void> {
@@ -81,7 +83,7 @@ export class AuthService {
   async getMe(uuid: string): Promise<MeResponse> {
     const u = await this.userRepo.findMeByUuid(uuid);
 
-    if (!u) throw new UnauthorizedException('Usuario no encontrado');
+    if (!u) throw new UnauthorizedException({ code: 'INVALID_TOKEN', message: 'Token de acceso inválido.' });
 
     const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email;
 

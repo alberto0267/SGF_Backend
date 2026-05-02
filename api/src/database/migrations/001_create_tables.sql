@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS workcenters (
   email      VARCHAR(100),
   company_id INT          NOT NULL,
   active     TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 

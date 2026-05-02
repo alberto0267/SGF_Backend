@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import * as crypto from 'crypto';
 import type { Request } from 'express';
 import { extractIp, extractSource } from '../common/request.helpers';
@@ -16,6 +16,12 @@ import { UsersService } from './users.service';
 @Roles('SuperAdmin', 'Owner')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Get()
+  @Roles('SuperAdmin')
+  findAll() {
+    return this.usersService.findAll();
+  }
 
   @Post('create-manager')
   @HttpCode(HttpStatus.CREATED)

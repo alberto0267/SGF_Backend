@@ -161,4 +161,61 @@ export class CompanyRepository {
   async deleteCompany(id: number, q?: QueryRunner): Promise<void> {
     await this.run(q, 'DELETE FROM companies WHERE id = ?', [id]);
   }
+
+  async findAllForSelect(filters: { name?: string; nif?: string }): Promise<RowDataPacket[]> {
+    const where: string[] = ['active = 1'];
+    const params: unknown[] = [];
+
+    if (filters.name) {
+      where.push('name LIKE ?');
+      params.push(`%${filters.name}%`);
+    }
+    if (filters.nif) {
+      where.push('nif LIKE ?');
+      params.push(`%${filters.nif}%`);
+    }
+
+    return this.db.query<RowDataPacket[]>(
+      `SELECT uuid, name, nif FROM companies WHERE ${where.join(' AND ')} ORDER BY name ASC`,
+      params,
+    );
+  }
+
+  async findAll(filters: { name?: string; nif?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+    const where: string[] = [];
+    const params: unknown[] = [];
+
+    if (filters.name) {
+      where.push('name LIKE ?');
+      params.push(`%${filters.name}%`);
+    }
+    if (filters.nif) {
+      where.push('nif LIKE ?');
+      params.push(`%${filters.nif}%`);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const offset = (filters.page - 1) * filters.limit;
+
+    const [data, countRows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT c.uuid, c.name, c.nif, c.address, c.phone, c.active, c.created_at,
+                COUNT(DISTINCT u.id) AS user_count,
+                COUNT(DISTINCT w.id) AS workcenter_count
+         FROM companies c
+         LEFT JOIN users u ON u.company_id = c.id
+         LEFT JOIN workcenters w ON w.company_id = c.id
+         ${whereClause}
+         GROUP BY c.id
+         ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
+        [...params, filters.limit, offset],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS total FROM companies c ${whereClause}`,
+        params,
+      ),
+    ]);
+
+    return { data, total: countRows[0]['total'] as number };
+  }
 }

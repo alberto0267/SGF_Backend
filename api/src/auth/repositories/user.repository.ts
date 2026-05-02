@@ -224,4 +224,18 @@ export class UserRepository {
   async deleteUser(userId: number, q?: QueryRunner): Promise<void> {
     await this.run(q, 'DELETE FROM users WHERE id = ?', [userId]);
   }
+
+  async findAll(): Promise<RowDataPacket[]> {
+    return this.db.query<RowDataPacket[]>(
+      `SELECT u.uuid, u.email, u.active, u.created_at,
+              r.name AS role,
+              c.name AS company,
+              p.first_name, p.last_name, p.dni, p.phone
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       LEFT JOIN companies c ON c.id = u.company_id
+       LEFT JOIN profiles p ON p.user_id = u.id
+       ORDER BY u.created_at DESC`,
+    );
+  }
 }
