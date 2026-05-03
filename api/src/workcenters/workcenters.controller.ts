@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -7,6 +7,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { extractIp, extractSource } from '../common/request.helpers';
 import { CreateWorkcenterDto } from './dto/create-workcenter.dto';
+import { UpdateWorkcenterDto } from './dto/update-workcenter.dto';
 import { QueryWorkcenterDto } from './dto/query-workcenter.dto';
 import { WorkcentersService } from './workcenters.service';
 
@@ -32,8 +33,21 @@ export class WorkcentersController {
   @Roles('SuperAdmin')
   create(@Body() dto: CreateWorkcenterDto, @Req() req: Request) {
     const user = req.user as JwtPayload;
-    const ip = extractIp(req);
-    const source = extractSource(req);
-    return this.workcentersService.create(dto, user.id, ip, source);
+    return this.workcentersService.create(dto, user.id, extractIp(req), extractSource(req));
+  }
+
+  @Patch(':uuid')
+  @Roles('SuperAdmin')
+  update(@Param('uuid') uuid: string, @Body() dto: UpdateWorkcenterDto, @Req() req: Request) {
+    const user = req.user as JwtPayload;
+    return this.workcentersService.update(uuid, dto, user.id, extractIp(req), extractSource(req));
+  }
+
+  @Delete(':uuid')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles('SuperAdmin')
+  hardDelete(@Param('uuid') uuid: string, @Req() req: Request) {
+    const user = req.user as JwtPayload;
+    return this.workcentersService.hardDelete(uuid, user.id, extractIp(req), extractSource(req));
   }
 }

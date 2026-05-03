@@ -72,15 +72,20 @@ export class CompaniesService {
         query,
       );
 
-      // ─── Crear centros de trabajo ──────────────────────────────────────────
-      const workCenters: Array<{ id: number; name: string; address: string | null; email: string | null }> = [];
+      const workcenterUuid = crypto.randomUUID();
+      const workcenterId = await this.companyRepo.createWorkCenter(
+        { uuid: workcenterUuid, name: dto.name, companyId, address: dto.address },
+        query,
+      );
 
-      for (const wc of dto.workCenters) {
-        const wcId = await this.companyRepo.createWorkCenter(
-          { uuid: crypto.randomUUID(), name: wc.name, companyId, address: wc.address, email: wc.email },
+      const extraWorkcenters: Array<{ uuid: string; name: string; address: string | null; email: string | null }> = [];
+      for (const wc of dto.workCenters ?? []) {
+        const wcUuid = crypto.randomUUID();
+        await this.companyRepo.createWorkCenter(
+          { uuid: wcUuid, name: wc.name, companyId, address: wc.address, email: wc.email },
           query,
         );
-        workCenters.push({ id: wcId, name: wc.name, address: wc.address ?? null, email: wc.email ?? null });
+        extraWorkcenters.push({ uuid: wcUuid, name: wc.name, address: wc.address ?? null, email: wc.email ?? null });
       }
 
       const result = {
@@ -99,7 +104,8 @@ export class CompaniesService {
           firstName: dto.owner.firstName,
           lastName: dto.owner.lastName,
         },
-        workCenters,
+        workcenter: { uuid: workcenterUuid, name: dto.name, address: dto.address },
+        extraWorkcenters,
       };
 
       await this.auditService.log({

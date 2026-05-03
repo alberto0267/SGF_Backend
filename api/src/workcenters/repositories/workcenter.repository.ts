@@ -35,6 +35,26 @@ export class WorkcenterRepository {
     return (rows[0] as { id: number; company_id: number }) ?? null;
   }
 
+  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; name: string; address: string | null; email: string | null; company_id: number; active: number } | null> {
+    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id, uuid, name, address, email, company_id, active FROM workcenters WHERE uuid = ?', [uuid]);
+    return (rows[0] as any) ?? null;
+  }
+
+  async update(id: number, data: { name?: string; address?: string; email?: string }, q?: QueryRunner): Promise<void> {
+    const fields = Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => `${k} = ?`);
+    const values = Object.entries(data).filter(([, v]) => v !== undefined).map(([, v]) => v);
+    if (fields.length === 0) return;
+    await this.run(q, `UPDATE workcenters SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
+  }
+
+  async deleteUserAssignments(workcenterId: number, q?: QueryRunner): Promise<void> {
+    await this.run(q, 'DELETE FROM user_workcenters WHERE workcenter_id = ?', [workcenterId]);
+  }
+
+  async delete(id: number, q?: QueryRunner): Promise<void> {
+    await this.run(q, 'DELETE FROM workcenters WHERE id = ?', [id]);
+  }
+
   async findAll(filters: { name?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
     const where: string[] = [];
     const params: unknown[] = [];

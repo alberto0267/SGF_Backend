@@ -3,7 +3,9 @@ import * as crypto from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { UserRepository } from '../auth/repositories/user.repository';
 import { CompanyRepository } from '../companies/repositories/company.repository';
+import { DatabaseService } from '../database/database.service';
 import { CreateWorkcenterDto } from './dto/create-workcenter.dto';
+import { UpdateWorkcenterDto } from './dto/update-workcenter.dto';
 import { WorkcenterRepository } from './repositories/workcenter.repository';
 
 @Injectable()
@@ -12,6 +14,7 @@ export class WorkcentersService {
     private readonly companyRepo: CompanyRepository,
     private readonly workcenterRepo: WorkcenterRepository,
     private readonly userRepo: UserRepository,
+    private readonly db: DatabaseService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -64,5 +67,47 @@ export class WorkcentersService {
     });
 
     return result;
+  }
+
+  async update(uuid: string, dto: UpdateWorkcenterDto, actorId: number, ip: string, source: 'web' | 'app') {
+    const workcenter = await this.workcenterRepo.findFullByUuid(uuid);
+    if (!workcenter) throw new NotFoundException('Centro de trabajo no encontrado');
+
+    await this.workcenterRepo.update(workcenter.id, dto);
+
+    await this.auditService.log({
+      actorId,
+      entityType: 'workcenter',
+      entityId: workcenter.id,
+      action: 'update',
+      source,
+      ip,
+      before: workcenter,
+      after: { ...workcenter, ...dto },
+      status: 'success',
+    });
+
+    return { ...workcenter, ...dto };
+  }
+
+  async hardDelete(uuid: string, actorId: number, ip: string, source: 'web' | 'app') {
+    const workcenter = await this.workcenterRepo.findFullByUuid(uuid);
+    if (!workcenter) throw new NotFoundException('Centro de trabajo no encontrado');
+
+    await this.db.transaction(async (q) => {
+      await this.workcenterRepo.deleteUserAssignments(workcenter.id, q);
+      await this.workcenterRepo.delete(workcenter.id, q);
+    });
+
+    await this.auditService.log({
+      actorId,
+      entityType: 'workcenter',
+      entityId: workcenter.id,
+      action: 'delete',
+      source,
+      ip,
+      before: workcenter,
+      status: 'success',
+    });
   }
 }

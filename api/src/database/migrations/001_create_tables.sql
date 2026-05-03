@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS companies (
   nif        VARCHAR(20)  NOT NULL UNIQUE,
   address    VARCHAR(255) NOT NULL,
   phone      VARCHAR(20),
-  email      VARCHAR(100),
   active     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
