@@ -64,7 +64,7 @@ export class UserRepository {
 
   async findMeByUuid(uuid: string): Promise<UserRow | null> {
     const rows = await this.db.query<UserRow[]>(
-      `SELECT u.uuid, u.email, r.name AS role_name,
+      `SELECT u.uuid, u.email, u.active, r.name AS role_name,
               p.first_name, p.last_name,
               c.name AS company_name
        FROM users u

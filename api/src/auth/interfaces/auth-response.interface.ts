@@ -10,4 +10,5 @@ export interface MeResponse {
   role: string;
   name: string;
   companyName: string | null;
+  active: boolean;
 }

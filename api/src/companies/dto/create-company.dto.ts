@@ -8,6 +8,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+
 import { Type } from 'class-transformer';
 
 export class CreateWorkCenterDto {
@@ -69,6 +70,10 @@ export class CreateCompanyDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @IsEmail({}, { message: 'El email de la empresa no tiene un formato válido' })
+  @IsOptional()
+  email?: string;
 
   @ValidateNested()
   @Type(() => CreateOwnerDto)

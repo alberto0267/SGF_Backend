@@ -10,6 +10,7 @@ export interface CreateCompanyData {
   nif: string;
   address: string;
   phone?: string;
+  email?: string;
 }
 
 export interface CreateWorkCenterData {
@@ -37,8 +38,8 @@ export class CompanyRepository {
   async create(data: CreateCompanyData, q?: QueryRunner): Promise<number> {
     const result = await this.run<ResultSetHeader>(
       q,
-      'INSERT INTO companies (uuid, name, nif, address, phone) VALUES (?, ?, ?, ?, ?)',
-      [data.uuid, data.name, data.nif, data.address, data.phone ?? null],
+      'INSERT INTO companies (uuid, name, nif, address, phone, email) VALUES (?, ?, ?, ?, ?, ?)',
+      [data.uuid, data.name, data.nif, data.address, data.phone ?? null, data.email ?? null],
     );
     return result.insertId;
   }

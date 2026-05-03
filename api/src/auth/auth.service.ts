@@ -93,6 +93,7 @@ export class AuthService {
       role: u.role_name,
       name,
       companyName: u.company_name,
+      active: u.active === 1,
     };
   }
 

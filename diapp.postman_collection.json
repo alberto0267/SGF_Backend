@@ -1,0 +1,298 @@
+{
+  "info": {
+    "name": "DiApp API",
+    "description": "Colección completa de la API de DiApp. Rellena la variable 'token' con el accessToken que devuelve Login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",       "value": "http://localhost:3000/api" },
+    { "key": "token",         "value": "" },
+    { "key": "refreshToken",  "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "description": "Autentica al usuario. Devuelve accessToken (JWT, 15 min), refreshToken (30 días) y expiresIn en segundos. Guarda el accessToken en la variable 'token' y el refreshToken en 'refreshToken'.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@diapp.com\",\n  \"password\": \"Admin123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Refresh token",
+          "description": "Renueva el accessToken usando el refreshToken. El refreshToken antiguo se invalida y se devuelve uno nuevo. Úsalo cuando el accessToken expire (401 TOKEN_EXPIRED).",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "description": "Invalida todos los refreshTokens activos del usuario. Requiere accessToken válido. Devuelve 204 sin body.",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/logout"
+          }
+        },
+        {
+          "name": "Me (rehidratación)",
+          "description": "Devuelve los datos del usuario autenticado a partir del accessToken. Usar al cargar la app (F5) para rehidratar el estado sin pasar por login. Devuelve: uuid, email, role, name, companyName, active.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Companies [SuperAdmin]",
+      "description": "Todos los endpoints de esta carpeta requieren rol SuperAdmin.",
+      "item": [
+        {
+          "name": "Listar empresas (paginado)",
+          "description": "Devuelve lista paginada de empresas con conteo de usuarios y workcenters. Filtros opcionales: name (like) y nif (like). Params: page (defecto 1), limit (defecto 20).",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/companies?page=1&limit=20",
+              "query": [
+                { "key": "page",  "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "name",  "value": "", "disabled": true },
+                { "key": "nif",   "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar empresas (select / autocomplete)",
+          "description": "Versión ligera para poblar selects o autocompletes en formularios. Solo devuelve uuid, name y nif. Solo incluye empresas activas.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/companies/select",
+              "query": [
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "nif",  "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear empresa",
+          "description": "Crea empresa + owner + workcenters iniciales en una sola transacción. El array workCenters puede tener uno o más centros. La contraseña del owner debe tener mínimo 8 chars, una mayúscula, un número y un carácter especial.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/companies/create-company",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Panadería García SL\",\n  \"nif\": \"B12345678\",\n  \"address\": \"Calle Mayor 10, Madrid\",\n  \"phone\": \"910000001\",\n  \"owner\": {\n    \"firstName\": \"Carlos\",\n    \"lastName\": \"García\",\n    \"dni\": \"12345678A\",\n    \"email\": \"carlos@panaderia.com\",\n    \"password\": \"Owner123!\",\n    \"phone\": \"600000001\"\n  },\n  \"workCenters\": [\n    {\n      \"name\": \"Central Madrid\",\n      \"address\": \"Calle Mayor 10, Madrid\",\n      \"email\": \"central@panaderia.com\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Actualizar empresa",
+          "description": "Actualiza los datos de la empresa (name, nif, address, phone). Todos los campos son opcionales, solo se actualizan los que se envíen. Sustituye :uuid por el uuid de la empresa.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/companies/:uuid",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Panadería García SL (actualizado)\",\n  \"address\": \"Calle Mayor 12, Madrid\",\n  \"phone\": \"910000002\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Activar / Desactivar empresa",
+          "description": "Interruptor maestro. Al desactivar (active: false): desactiva la empresa + todos sus usuarios + todos sus workcenters + revoca todos los refreshTokens. Al activar (active: true): reactiva todo en cascada.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/companies/:uuid/active",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Eliminar empresa (hard delete)",
+          "description": "Borrado permanente en cascada: elimina todos los usuarios, workcenters, perfiles, tokens, notificaciones y demás datos relacionados. Irreversible. Devuelve 204 sin body.",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/companies/:uuid"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workcenters",
+      "item": [
+        {
+          "name": "Listar todos [SuperAdmin]",
+          "description": "Lista paginada de todos los workcenters con su empresa y conteo de trabajadores. Solo SuperAdmin. Filtro opcional: name (like).",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/workcenters?page=1&limit=20",
+              "query": [
+                { "key": "page",  "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "name",  "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar los míos [Owner]",
+          "description": "Lista los workcenters de la empresa del Owner autenticado. Solo accesible con rol Owner. Filtro opcional: name (like).",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/workcenters/mine?page=1&limit=20",
+              "query": [
+                { "key": "page",  "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "name",  "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear workcenter [SuperAdmin]",
+          "description": "Crea un nuevo centro de trabajo asociado a una empresa existente. El companyUuid debe ser el uuid de una empresa activa. address y email son opcionales.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/workcenters/create-workcenters",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyUuid\": \"COMPANY-UUID-AQUI\",\n  \"name\": \"Sucursal Norte\",\n  \"address\": \"Calle Norte 5, Madrid\",\n  \"email\": \"norte@panaderia.com\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Listar todos [SuperAdmin]",
+          "description": "Lista todos los usuarios del sistema con su rol, empresa, perfil y estado activo. Solo SuperAdmin.",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/users"
+          }
+        },
+        {
+          "name": "Crear Manager [SuperAdmin | Owner]",
+          "description": "Crea un usuario con rol Manager. El Owner solo puede crear Managers en su propia empresa. dni, phone y address son opcionales. La contraseña requiere mínimo 8 chars, una mayúscula, un número y un carácter especial.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users/create-manager",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"manager@panaderia.com\",\n  \"password\": \"Manager123!\",\n  \"companyUuid\": \"COMPANY-UUID-AQUI\",\n  \"workcenterUuid\": \"WORKCENTER-UUID-AQUI\",\n  \"firstName\": \"Laura\",\n  \"lastName\": \"Martínez\",\n  \"dni\": \"87654321B\",\n  \"phone\": \"600000002\",\n  \"address\": \"Calle Sur 3, Madrid\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Crear Employee [SuperAdmin | Owner]",
+          "description": "Crea un usuario con rol Employee. Mismo comportamiento y restricciones que crear Manager. El workcenter debe pertenecer a la empresa indicada.",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users/create-employee",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"empleado@panaderia.com\",\n  \"password\": \"Empleado123!\",\n  \"companyUuid\": \"COMPANY-UUID-AQUI\",\n  \"workcenterUuid\": \"WORKCENTER-UUID-AQUI\",\n  \"firstName\": \"Pedro\",\n  \"lastName\": \"López\",\n  \"dni\": \"11111111C\",\n  \"phone\": \"600000003\",\n  \"address\": \"Calle Este 7, Madrid\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Actualizar usuario [SuperAdmin | Owner]",
+          "description": "Actualiza email y/o datos de perfil del usuario. El Owner solo puede editar Manager y Employee de su empresa. SuperAdmin puede editar a cualquiera. Todos los campos son opcionales.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users/:uuid",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nuevo@panaderia.com\",\n  \"firstName\": \"Pedro\",\n  \"lastName\": \"López Nuevo\",\n  \"dni\": \"11111111C\",\n  \"phone\": \"600000099\",\n  \"address\": \"Calle Oeste 1, Madrid\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Activar / Desactivar usuario [SuperAdmin | Owner]",
+          "description": "Cambia el estado active del usuario. Al desactivar: también revoca todos sus refreshTokens (fuerza logout). El Owner solo puede gestionar Manager y Employee de su empresa.",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users/:uuid/active",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Eliminar usuario (hard delete) [SuperAdmin | Owner]",
+          "description": "Borrado permanente en cascada: elimina el usuario y todos sus datos (perfil, tokens, workcenters asignados, etc.). El Owner solo puede eliminar Manager y Employee de su empresa. Devuelve 204 sin body.",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/users/:uuid"
+          }
+        }
+      ]
+    }
+  ]
+}
