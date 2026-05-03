@@ -134,8 +134,18 @@ export class UserRepository {
     return rows.length > 0;
   }
 
+  async existsByEmailExcluding(email: string, userId: number, q?: QueryRunner): Promise<boolean> {
+    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
+    return rows.length > 0;
+  }
+
   async existsByDni(dni: string, q?: QueryRunner): Promise<boolean> {
     const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM profiles WHERE dni = ?', [dni]);
+    return rows.length > 0;
+  }
+
+  async existsByDniExcluding(dni: string, userId: number, q?: QueryRunner): Promise<boolean> {
+    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM profiles WHERE dni = ? AND user_id != ?', [dni, userId]);
     return rows.length > 0;
   }
 
@@ -199,6 +209,14 @@ export class UserRepository {
 
   async updateEmail(userId: number, email: string, q?: QueryRunner): Promise<void> {
     await this.run(q, 'UPDATE users SET email = ? WHERE id = ?', [email, userId]);
+  }
+
+  async updatePassword(userId: number, hashedPassword: string, q?: QueryRunner): Promise<void> {
+    await this.run(q, 'UPDATE users SET password = ? WHERE id = ?', [hashedPassword, userId]);
+  }
+
+  async updateRole(userId: number, roleId: number, q?: QueryRunner): Promise<void> {
+    await this.run(q, 'UPDATE users SET role_id = ? WHERE id = ?', [roleId, userId]);
   }
 
   async updateProfile(userId: number, data: Partial<{ firstName: string; lastName: string; dni: string; phone: string; address: string }>, q?: QueryRunner): Promise<void> {

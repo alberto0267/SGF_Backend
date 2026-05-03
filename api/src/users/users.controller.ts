@@ -8,7 +8,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateMemberDto } from './dto/create-member.dto';
-import { UpdateMemberDto, UpdateMemberActiveDto } from './dto/update-member.dto';
+import { UpdateMemberDto, UpdateMemberActiveDto, UpdateMemberRoleDto } from './dto/update-member.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -40,6 +40,13 @@ export class UsersController {
   @Patch(':uuid')
   update(@Param('uuid') uuid: string, @Body() dto: UpdateMemberDto, @CurrentUser() user: JwtPayload, @Req() req: Request) {
     return this.usersService.update(uuid, dto, user, extractIp(req), extractSource(req));
+  }
+
+  @Patch(':uuid/role')
+  @Roles('SuperAdmin')
+  updateRole(@Param('uuid') uuid: string, @Body() dto: UpdateMemberRoleDto, @Req() req: Request) {
+    const user = req.user as JwtPayload;
+    return this.usersService.updateRole(uuid, dto, user.id, extractIp(req), extractSource(req));
   }
 
   @Patch(':uuid/active')

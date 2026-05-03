@@ -40,6 +40,11 @@ export class WorkcenterRepository {
     return (rows[0] as any) ?? null;
   }
 
+  async existsByEmailExcluding(email: string, workcenterId: number, q?: QueryRunner): Promise<boolean> {
+    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM workcenters WHERE email = ? AND id != ?', [email, workcenterId]);
+    return rows.length > 0;
+  }
+
   async update(id: number, data: { name?: string; address?: string; email?: string }, q?: QueryRunner): Promise<void> {
     const fields = Object.entries(data).filter(([, v]) => v !== undefined).map(([k]) => `${k} = ?`);
     const values = Object.entries(data).filter(([, v]) => v !== undefined).map(([, v]) => v);

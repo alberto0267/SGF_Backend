@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { UserRepository } from '../auth/repositories/user.repository';
@@ -72,6 +72,10 @@ export class WorkcentersService {
   async update(uuid: string, dto: UpdateWorkcenterDto, actorId: number, ip: string, source: 'web' | 'app') {
     const workcenter = await this.workcenterRepo.findFullByUuid(uuid);
     if (!workcenter) throw new NotFoundException('Centro de trabajo no encontrado');
+
+    if (dto.email && await this.workcenterRepo.existsByEmailExcluding(dto.email, workcenter.id)) {
+      throw new ConflictException('El email ya está en uso por otro centro de trabajo');
+    }
 
     await this.workcenterRepo.update(workcenter.id, dto);
 

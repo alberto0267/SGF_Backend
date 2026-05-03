@@ -13,7 +13,7 @@ import { DatabaseService } from '../database/database.service';
 import { WorkcenterRepository } from '../workcenters/repositories/workcenter.repository';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateMemberDto } from './dto/create-member.dto';
-import { UpdateMemberDto, UpdateMemberActiveDto } from './dto/update-member.dto';
+import { UpdateMemberDto, UpdateMemberActiveDto, UpdateMemberRoleDto } from './dto/update-member.dto';
 
 @Injectable()
 export class UsersService {
@@ -110,17 +110,21 @@ export class UsersService {
 
     await this.checkPermission(currentUser, target);
 
-    if (dto.email && await this.userRepo.existsByEmail(dto.email)) {
+    if (dto.email && await this.userRepo.existsByEmailExcluding(dto.email, target.id)) {
       throw new ConflictException('El email ya está en uso');
     }
 
-    if (dto.dni && await this.userRepo.existsByDni(dto.dni)) {
+    if (dto.dni && await this.userRepo.existsByDniExcluding(dto.dni, target.id)) {
       throw new ConflictException('El DNI ya está en uso');
     }
 
     await this.db.transaction(async (q) => {
       if (dto.email) await this.userRepo.updateEmail(target.id, dto.email, q);
-      const { email: _e, ...profileFields } = dto;
+      if (dto.newPassword) {
+        const hashed = await bcrypt.hash(dto.newPassword, 10);
+        await this.userRepo.updatePassword(target.id, hashed, q);
+      }
+      const { email: _e, newPassword: _p, ...profileFields } = dto;
       await this.userRepo.updateProfile(target.id, profileFields, q);
     });
 
@@ -197,6 +201,37 @@ export class UsersService {
       before: target,
       status: 'success',
     });
+  }
+
+  async updateRole(uuid: string, dto: UpdateMemberRoleDto, actorId: number, ip: string, source: 'web' | 'app') {
+    const target = await this.userRepo.findFullByUuid(uuid);
+    if (!target) throw new NotFoundException('Usuario no encontrado');
+
+    if (target.role_name === 'SuperAdmin') {
+      throw new ForbiddenException('No puedes cambiar el rol de un SuperAdmin');
+    }
+
+    const roleId = await this.userRepo.findRoleIdByName(dto.role);
+    if (!roleId) throw new NotFoundException('Rol no encontrado');
+
+    await this.db.transaction(async (q) => {
+      await this.userRepo.updateRole(target.id, roleId, q);
+      await this.userRepo.revokeTokensByUserId(target.id, q);
+    });
+
+    await this.auditService.log({
+      actorId,
+      entityType: 'user',
+      entityId: target.id,
+      action: 'update_role',
+      source,
+      ip,
+      before: { role: target.role_name },
+      after: { role: dto.role },
+      status: 'success',
+    });
+
+    return { uuid, role: dto.role };
   }
 
   private async checkPermission(currentUser: JwtPayload, target: { role_name: string; company_id: number }) {
