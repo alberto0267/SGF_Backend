@@ -11,6 +11,8 @@
 
 - Update changelog [skip ci]
 
+- Update changelog [skip ci]
+
 
 ### Features
 
@@ -21,6 +23,10 @@
 - Add fix workcneter and companyç
 
 - Add delete and update wc
+
+- Change rol user
+
+- Mobile add
 
 
 
