@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import * as crypto from 'crypto';
 import type { Request } from 'express';
 import { extractIp, extractSource } from '../common/request.helpers';
@@ -8,6 +8,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateMemberDto } from './dto/create-member.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { UpdateMemberDto, UpdateMemberActiveDto, UpdateMemberRoleDto } from './dto/update-member.dto';
 import { UsersService } from './users.service';
 
@@ -18,9 +19,15 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('SuperAdmin')
-  findAll() {
-    return this.usersService.findAll();
+  @Roles('SuperAdmin', 'Owner', 'Manager')
+  findByCompany(@Query() query: QueryUserDto, @CurrentUser() user: JwtPayload) {
+    return this.usersService.findByCompany(user, query.companyUuid);
+  }
+
+  @Get(':uuid')
+  @Roles('SuperAdmin', 'Owner', 'Manager')
+  findOne(@Param('uuid') uuid: string, @CurrentUser() user: JwtPayload) {
+    return this.usersService.findOneByUuid(uuid, user);
   }
 
   @Post('create-manager')

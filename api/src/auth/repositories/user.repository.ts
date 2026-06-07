@@ -193,11 +193,13 @@ export class UserRepository {
     );
   }
 
-  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; email: string; active: number; role_name: string; company_id: number; first_name: string | null; last_name: string | null; dni: string | null; phone: string | null; address: string | null } | null> {
+  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; email: string; active: number; role_name: string; company_id: number; first_name: string | null; last_name: string | null; dni: string | null; phone: string | null; address: string | null; workcenter_uuid: string | null; workcenter_name: string | null } | null> {
     const rows = await this.run<RowDataPacket[]>(
       q,
       `SELECT u.id, u.uuid, u.email, u.active, u.company_id, r.name AS role_name,
-              p.first_name, p.last_name, p.dni, p.phone, p.address
+              p.first_name, p.last_name, p.dni, p.phone, p.address,
+              (SELECT w.uuid FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_uuid,
+              (SELECT w.name FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_name
        FROM users u
        JOIN roles r ON r.id = u.role_id
        LEFT JOIN profiles p ON p.user_id = u.id
@@ -248,12 +250,98 @@ export class UserRepository {
       `SELECT u.uuid, u.email, u.active, u.created_at,
               r.name AS role,
               c.name AS company,
-              p.first_name, p.last_name, p.dni, p.phone
+              p.first_name, p.last_name, p.dni, p.phone,
+              (SELECT w.uuid FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_uuid,
+              (SELECT w.name FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_name
        FROM users u
        JOIN roles r ON r.id = u.role_id
        LEFT JOIN companies c ON c.id = u.company_id
        LEFT JOIN profiles p ON p.user_id = u.id
        ORDER BY u.created_at DESC`,
     );
+  }
+
+  async findByCompanyId(companyId: number, q?: QueryRunner): Promise<RowDataPacket[]> {
+    return this.run<RowDataPacket[]>(
+      q,
+      `SELECT u.uuid, u.email, u.active, u.created_at,
+              r.name AS role,
+              p.first_name, p.last_name, p.phone,
+              (SELECT w.uuid FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_uuid,
+              (SELECT w.name FROM workcenters w JOIN user_workcenters uw ON uw.workcenter_id = w.id WHERE uw.user_id = u.id LIMIT 1) AS workcenter_name
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       LEFT JOIN profiles p ON p.user_id = u.id
+       WHERE u.company_id = ?
+       ORDER BY u.created_at DESC`,
+      [companyId],
+    );
+  }
+
+  async findWorkcenterIdsByUserId(userId: number): Promise<number[]> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      'SELECT workcenter_id FROM user_workcenters WHERE user_id = ?',
+      [userId],
+    );
+    return rows.map((r) => r['workcenter_id'] as number);
+  }
+
+  async findByWorkcenterIds(workcenterIds: number[]): Promise<RowDataPacket[]> {
+    if (workcenterIds.length === 0) return [];
+    const placeholders = workcenterIds.map(() => '?').join(', ');
+    return this.db.query<RowDataPacket[]>(
+      `SELECT DISTINCT u.uuid, u.email, u.active, u.created_at,
+              r.name AS role,
+              p.first_name, p.last_name, p.phone,
+              (SELECT w.uuid FROM workcenters w JOIN user_workcenters uw2 ON uw2.workcenter_id = w.id WHERE uw2.user_id = u.id LIMIT 1) AS workcenter_uuid,
+              (SELECT w.name FROM workcenters w JOIN user_workcenters uw2 ON uw2.workcenter_id = w.id WHERE uw2.user_id = u.id LIMIT 1) AS workcenter_name
+       FROM users u
+       JOIN roles r ON r.id = u.role_id
+       LEFT JOIN profiles p ON p.user_id = u.id
+       JOIN user_workcenters uw ON uw.user_id = u.id
+       WHERE uw.workcenter_id IN (${placeholders})
+       ORDER BY u.created_at DESC`,
+      workcenterIds,
+    );
+  }
+
+  async sharesWorkcenterWithUser(targetUserId: number, managerWorkcenterIds: number[]): Promise<boolean> {
+    if (managerWorkcenterIds.length === 0) return false;
+    const placeholders = managerWorkcenterIds.map(() => '?').join(', ');
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM user_workcenters WHERE user_id = ? AND workcenter_id IN (${placeholders}) LIMIT 1`,
+      [targetUserId, ...managerWorkcenterIds],
+    );
+    return rows.length > 0;
+  }
+
+  async findIdsByUuids(uuids: string[], q?: QueryRunner): Promise<{ id: number; uuid: string }[]> {
+    if (uuids.length === 0) return [];
+    const placeholders = uuids.map(() => '?').join(', ');
+    return this.run<RowDataPacket[]>(q, `SELECT id, uuid FROM users WHERE uuid IN (${placeholders})`, uuids) as any;
+  }
+
+  async findOwnersByCompanyId(companyId: number): Promise<{ id: number }[]> {
+    return this.db.query<RowDataPacket[]>(
+      `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.company_id = ? AND r.name = 'Owner' AND u.active = 1`,
+      [companyId],
+    ) as any;
+  }
+
+  async findWorkcentersByUserId(userId: number): Promise<{ workcenter_id: number; company_id: number }[]> {
+    return this.db.query<RowDataPacket[]>(
+      `SELECT uw.workcenter_id, w.company_id FROM user_workcenters uw JOIN workcenters w ON w.id = uw.workcenter_id WHERE uw.user_id = ?`,
+      [userId],
+    ) as any;
+  }
+
+  async findUsersInWorkcenter(workcenterIds: number[], q?: QueryRunner): Promise<{ user_id: number }[]> {
+    if (workcenterIds.length === 0) return [];
+    const placeholders = workcenterIds.map(() => '?').join(', ');
+    return this.run<RowDataPacket[]>(
+      q,
+      `SELECT DISTINCT user_id FROM user_workcenters WHERE workcenter_id IN (${placeholders})`,
+      workcenterIds,
+    ) as any;
   }
 }

@@ -164,15 +164,39 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS overtimes (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  user_id    INT            NOT NULL,
-  date       DATE           NOT NULL,
-  hours      DECIMAL(4, 2)  NOT NULL,
-  reason     TEXT,
-  status     ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
-  created_at DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+CREATE TABLE IF NOT EXISTS overtime_requests (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  uuid          CHAR(36)    NOT NULL UNIQUE,
+  workcenter_id INT         NOT NULL,
+  requested_by  INT         NOT NULL,
+  date          DATE        NOT NULL,
+  reason        TEXT,
+  status        ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  approved_by   INT         NULL,
+  approved_at   DATETIME    NULL,
+  created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (workcenter_id) REFERENCES workcenters(id),
+  FOREIGN KEY (requested_by)  REFERENCES users(id),
+  FOREIGN KEY (approved_by)   REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS overtime_request_items (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  request_id  INT           NOT NULL,
+  employee_id INT           NOT NULL,
+  hours       DECIMAL(4, 2) NOT NULL,
+  FOREIGN KEY (request_id)  REFERENCES overtime_requests(id) ON DELETE CASCADE,
+  FOREIGN KEY (employee_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS overtime_accumulation (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  employee_id INT           NOT NULL,
+  year        SMALLINT      NOT NULL,
+  month       TINYINT       NOT NULL,
+  total_hours DECIMAL(6, 2) NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_emp_year_month (employee_id, year, month),
+  FOREIGN KEY (employee_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS bakery (

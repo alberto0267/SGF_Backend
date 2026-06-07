@@ -120,6 +120,230 @@ async function seed() {
   console.log('  manager@blancoapp.com   / Manager123!   (Manager)');
   console.log('  empleado@blancoapp.com  / Empleado123!  (Employee)');
 
+  // ── Empresa Los Mosquitos ──────────────────────────────────────────────────
+  const mosqUuid = randomUUID();
+  await db.query(
+    `INSERT IGNORE INTO companies (uuid, name, nif, address, phone, active) VALUES (?, 'Los Mosquitos S.L.', 'B98765432', 'Avenida del Sol 45, Sevilla, 41001', '954000000', 1)`,
+    [mosqUuid],
+  );
+  const [mosqCompanies]: any = await db.query(`SELECT id FROM companies WHERE nif = 'B98765432'`);
+  const mosqCompanyId = mosqCompanies[0].id;
+
+  // Owner
+  const ownerHash = await bcrypt.hash('Owner123!', 10);
+  await db.query(
+    `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+    [randomUUID(), 'owner@losmosquitos.com', ownerHash, roleId('Owner'), mosqCompanyId],
+  );
+  const [ownerRows]: any = await db.query(`SELECT id FROM users WHERE email = 'owner@losmosquitos.com'`);
+  const ownerId = ownerRows[0].id;
+  await db.query(
+    `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone, address) VALUES (?, 'Carlos', 'Mosquera', '622000000', 'Avenida del Sol 45, Sevilla, 41001')`,
+    [ownerId],
+  );
+
+  // Workcenters
+  const mosqWorkcenters = [
+    { name: 'Franquicia 1', address: 'Calle Betis 10, Sevilla, 41010',   email: 'franquicia1@losmosquitos.com' },
+    { name: 'Franquicia 2', address: 'Calle Sierpes 22, Sevilla, 41004', email: 'franquicia2@losmosquitos.com' },
+    { name: 'Franquicia 3', address: 'Calle Feria 55, Sevilla, 41003',   email: 'franquicia3@losmosquitos.com' },
+  ];
+
+  const mosqWcIds: number[] = [];
+  for (const wc of mosqWorkcenters) {
+    const wcUuid = randomUUID();
+    await db.query(
+      `INSERT IGNORE INTO workcenters (uuid, name, address, email, company_id, active) VALUES (?, ?, ?, ?, ?, 1)`,
+      [wcUuid, wc.name, wc.address, wc.email, mosqCompanyId],
+    );
+    const [wcRows]: any = await db.query(`SELECT id FROM workcenters WHERE email = ?`, [wc.email]);
+    mosqWcIds.push(wcRows[0].id);
+  }
+
+  const managerPassHash  = await bcrypt.hash('Manager123!', 10);
+  const employeePassHash = await bcrypt.hash('Empleado123!', 10);
+
+  const franchises = [
+    {
+      wcIdx: 0,
+      manager: { email: 'manager1@losmosquitos.com', firstName: 'Sofía',   lastName: 'Ruiz',    phone: '633100001' },
+      employees: [
+        { email: 'emp1.1@losmosquitos.com', firstName: 'Lucía',   lastName: 'Gómez',   phone: '644100001' },
+        { email: 'emp1.2@losmosquitos.com', firstName: 'Pablo',   lastName: 'Martín',  phone: '644100002' },
+        { email: 'emp1.3@losmosquitos.com', firstName: 'Elena',   lastName: 'Sánchez', phone: '644100003' },
+        { email: 'emp1.4@losmosquitos.com', firstName: 'Marcos',  lastName: 'López',   phone: '644100004' },
+        { email: 'emp1.5@losmosquitos.com', firstName: 'Carmen',  lastName: 'Pérez',   phone: '644100005' },
+      ],
+    },
+    {
+      wcIdx: 1,
+      manager: { email: 'manager2@losmosquitos.com', firstName: 'Andrés',  lastName: 'Torres',  phone: '633200001' },
+      employees: [
+        { email: 'emp2.1@losmosquitos.com', firstName: 'Irene',   lastName: 'Flores',  phone: '644200001' },
+        { email: 'emp2.2@losmosquitos.com', firstName: 'Javier',  lastName: 'Castro',  phone: '644200002' },
+        { email: 'emp2.3@losmosquitos.com', firstName: 'Raquel',  lastName: 'Moreno',  phone: '644200003' },
+        { email: 'emp2.4@losmosquitos.com', firstName: 'Diego',   lastName: 'Herrera', phone: '644200004' },
+        { email: 'emp2.5@losmosquitos.com', firstName: 'Natalia', lastName: 'Jiménez', phone: '644200005' },
+      ],
+    },
+    {
+      wcIdx: 2,
+      manager: { email: 'manager3@losmosquitos.com', firstName: 'Beatriz', lastName: 'Vega',    phone: '633300001' },
+      employees: [
+        { email: 'emp3.1@losmosquitos.com', firstName: 'Hugo',    lastName: 'Romero',  phone: '644300001' },
+        { email: 'emp3.2@losmosquitos.com', firstName: 'Marta',   lastName: 'Alonso',  phone: '644300002' },
+        { email: 'emp3.3@losmosquitos.com', firstName: 'Sergio',  lastName: 'Navarro', phone: '644300003' },
+        { email: 'emp3.4@losmosquitos.com', firstName: 'Alba',    lastName: 'Ramos',   phone: '644300004' },
+        { email: 'emp3.5@losmosquitos.com', firstName: 'Iván',    lastName: 'Molina',  phone: '644300005' },
+      ],
+    },
+  ];
+
+  for (const f of franchises) {
+    const wcId = mosqWcIds[f.wcIdx];
+
+    await db.query(
+      `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+      [randomUUID(), f.manager.email, managerPassHash, roleId('Manager'), mosqCompanyId],
+    );
+    const [mgRows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [f.manager.email]);
+    const mgId = mgRows[0].id;
+    await db.query(
+      `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?)`,
+      [mgId, f.manager.firstName, f.manager.lastName, f.manager.phone],
+    );
+    await db.query(`INSERT IGNORE INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)`, [mgId, wcId]);
+
+    for (const emp of f.employees) {
+      await db.query(
+        `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+        [randomUUID(), emp.email, employeePassHash, roleId('Employee'), mosqCompanyId],
+      );
+      const [empRows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [emp.email]);
+      const empId = empRows[0].id;
+      await db.query(
+        `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?)`,
+        [empId, emp.firstName, emp.lastName, emp.phone],
+      );
+      await db.query(`INSERT IGNORE INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)`, [empId, wcId]);
+    }
+  }
+
+  console.log('');
+  console.log('  — Los Mosquitos S.L. —');
+  console.log('  owner@losmosquitos.com    / Owner123!    (Owner)');
+  console.log('  manager1@losmosquitos.com / Manager123!  (Manager - Franquicia 1)');
+  console.log('  manager2@losmosquitos.com / Manager123!  (Manager - Franquicia 2)');
+  console.log('  manager3@losmosquitos.com / Manager123!  (Manager - Franquicia 3)');
+  console.log('  emp1.1 … emp3.5 @losmosquitos.com / Empleado123! (15 empleados)');
+
+  // ── Horas extras (Los Mosquitos S.L.) ────────────────────────────────────
+  const [mg1Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager1@losmosquitos.com'`);
+  const [mg2Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager2@losmosquitos.com'`);
+  const [mg3Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager3@losmosquitos.com'`);
+  const mgId1 = mg1Res[0].id;
+  const mgId2 = mg2Res[0].id;
+  const mgId3 = mg3Res[0].id;
+
+  const getEmpId = async (email: string): Promise<number> => {
+    const [rows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [email]);
+    return rows[0].id;
+  };
+
+  const emp1Ids = await Promise.all(
+    ['emp1.1', 'emp1.2', 'emp1.3', 'emp1.4', 'emp1.5'].map((p) => getEmpId(`${p}@losmosquitos.com`)),
+  );
+  const emp2Ids = await Promise.all(
+    ['emp2.1', 'emp2.2', 'emp2.3', 'emp2.4', 'emp2.5'].map((p) => getEmpId(`${p}@losmosquitos.com`)),
+  );
+  const emp3Ids = await Promise.all(
+    ['emp3.1', 'emp3.2', 'emp3.3', 'emp3.4', 'emp3.5'].map((p) => getEmpId(`${p}@losmosquitos.com`)),
+  );
+
+  const insertOtRequest = async (
+    workcenterId: number,
+    managerId: number,
+    date: string,
+    reason: string,
+    items: { employeeId: number; hours: number }[],
+    status: 'pending' | 'approved' | 'rejected',
+    approvedById?: number,
+  ): Promise<void> => {
+    const uuid = randomUUID();
+    const [res]: any = await db.query(
+      `INSERT INTO overtime_requests (uuid, workcenter_id, requested_by, date, reason) VALUES (?, ?, ?, ?, ?)`,
+      [uuid, workcenterId, managerId, date, reason],
+    );
+    const reqId: number = res.insertId;
+
+    for (const item of items) {
+      await db.query(
+        `INSERT INTO overtime_request_items (request_id, employee_id, hours) VALUES (?, ?, ?)`,
+        [reqId, item.employeeId, item.hours],
+      );
+    }
+
+    if (status !== 'pending') {
+      await db.query(
+        `UPDATE overtime_requests SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?`,
+        [status, approvedById ?? null, `${date} 16:00:00`, reqId],
+      );
+    }
+
+    if (status === 'approved') {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      for (const item of items) {
+        await db.query(
+          `INSERT INTO overtime_accumulation (employee_id, year, month, total_hours)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE total_hours = total_hours + VALUES(total_hours)`,
+          [item.employeeId, year, month, item.hours],
+        );
+      }
+    }
+  };
+
+  // Franquicia 1 — Sofía Ruiz
+  await insertOtRequest(mosqWcIds[0], mgId1, '2026-03-15', 'Inventario de cierre trimestral',
+    emp1Ids.map((id) => ({ employeeId: id, hours: 2 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[0], mgId1, '2026-04-10', 'Campaña de primavera',
+    [emp1Ids[0], emp1Ids[1], emp1Ids[2]].map((id) => ({ employeeId: id, hours: 3 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[0], mgId1, '2026-04-25', 'Visita de auditoría interna',
+    [emp1Ids[3], emp1Ids[4]].map((id) => ({ employeeId: id, hours: 1.5 })), 'rejected', ownerId);
+
+  await insertOtRequest(mosqWcIds[0], mgId1, '2026-05-05', 'Jornada de puertas abiertas',
+    [emp1Ids[0], emp1Ids[1], emp1Ids[2], emp1Ids[3]].map((id) => ({ employeeId: id, hours: 2.5 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[0], mgId1, '2026-05-20', 'Recepción de mercancía extra',
+    [emp1Ids[0], emp1Ids[2], emp1Ids[4]].map((id) => ({ employeeId: id, hours: 2 })), 'pending');
+
+  // Franquicia 2 — Andrés Torres
+  await insertOtRequest(mosqWcIds[1], mgId2, '2026-03-20', 'Cierre de mes y cuadre de caja',
+    [emp2Ids[0], emp2Ids[1], emp2Ids[2]].map((id) => ({ employeeId: id, hours: 4 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[1], mgId2, '2026-04-15', 'Formación interna fuera de horario',
+    [emp2Ids[0], emp2Ids[1], emp2Ids[2], emp2Ids[3]].map((id) => ({ employeeId: id, hours: 2 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[1], mgId2, '2026-05-10', 'Campaña de mayo',
+    [emp2Ids[3], emp2Ids[4]].map((id) => ({ employeeId: id, hours: 3 })), 'pending');
+
+  // Franquicia 3 — Beatriz Vega
+  await insertOtRequest(mosqWcIds[2], mgId3, '2026-04-05', 'Evento especial franquicia',
+    [emp3Ids[0], emp3Ids[1]].map((id) => ({ employeeId: id, hours: 5 })), 'approved', ownerId);
+
+  await insertOtRequest(mosqWcIds[2], mgId3, '2026-05-15', 'Preparación nueva temporada',
+    [emp3Ids[2], emp3Ids[3], emp3Ids[4]].map((id) => ({ employeeId: id, hours: 2 })), 'pending');
+
+  console.log('');
+  console.log('Horas extras seed (Los Mosquitos):');
+  console.log('  Franquicia 1: 5 solicitudes — 3 aprobadas, 1 rechazada, 1 pendiente');
+  console.log('  Franquicia 2: 3 solicitudes — 2 aprobadas, 1 pendiente');
+  console.log('  Franquicia 3: 2 solicitudes — 1 aprobada, 1 pendiente');
+
   await db.end();
 }
 

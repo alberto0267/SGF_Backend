@@ -29,6 +29,46 @@ export class UsersService {
     return this.userRepo.findAll();
   }
 
+  async findByCompany(currentUser: JwtPayload, companyUuid?: string) {
+    if (currentUser.role === 'SuperAdmin') {
+      if (companyUuid) {
+        const company = await this.companyRepo.findByUuid(companyUuid);
+        if (!company) throw new NotFoundException('Empresa no encontrada');
+        return this.userRepo.findByCompanyId(company.id);
+      }
+      return this.userRepo.findAll();
+    }
+
+    if (currentUser.role === 'Manager') {
+      const workcenterIds = await this.userRepo.findWorkcenterIdsByUserId(currentUser.id);
+      return this.userRepo.findByWorkcenterIds(workcenterIds);
+    }
+
+    const companyId = await this.userRepo.findCompanyIdByUserId(currentUser.id);
+    if (!companyId) throw new NotFoundException('El usuario no tiene empresa asignada');
+    return this.userRepo.findByCompanyId(companyId);
+  }
+
+  async findOneByUuid(uuid: string, currentUser: JwtPayload) {
+    const target = await this.userRepo.findFullByUuid(uuid);
+    if (!target) throw new NotFoundException('Usuario no encontrado');
+
+    if (currentUser.role === 'Owner') {
+      const companyId = await this.userRepo.findCompanyIdByUserId(currentUser.id);
+      if (target.company_id !== companyId) {
+        throw new ForbiddenException('No tienes acceso a este usuario');
+      }
+    }
+
+    if (currentUser.role === 'Manager') {
+      const workcenterIds = await this.userRepo.findWorkcenterIdsByUserId(currentUser.id);
+      const shared = await this.userRepo.sharesWorkcenterWithUser(target.id, workcenterIds);
+      if (!shared) throw new ForbiddenException('No tienes acceso a este usuario');
+    }
+
+    return target;
+  }
+
   async create(
     role: 'Manager' | 'Employee',
     dto: CreateMemberDto,
