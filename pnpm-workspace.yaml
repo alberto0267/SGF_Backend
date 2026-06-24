@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+  - api
+  - api-e2e
+  - worker
+  - worker-e2e
+  - shared
+allowBuilds:
+  '@nestjs/core': true
+  '@parcel/watcher': true
+  '@swc/core': true
+  nx: true
+  unrs-resolver: true

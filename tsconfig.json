@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./api-e2e"
+    },
+    {
+      "path": "./api"
+    },
+    {
+      "path": "./worker-e2e"
+    },
+    {
+      "path": "./worker"
+    },
+    {
+      "path": "./shared"
+    }
+  ]
+}

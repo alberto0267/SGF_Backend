@@ -1,0 +1,26 @@
+node_modules
+test-output
+
+# Entorno — contiene credenciales, nunca se sube
+.env
+.env.*
+!.env.example
+
+# Claude Code
+.claude/
+
+# Caché Nx
+.nx/
+
+# Logs
+*.log
+error.log
+
+# VSCode
+.vscode/
+
+# Dist
+dist/
+test_parapostman.md
+arquitecturas.md
+duda.md

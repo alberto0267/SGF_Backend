@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: sgf-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: sgf
+      POSTGRES_USER: sgf
+      POSTGRES_PASSWORD: sgf
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

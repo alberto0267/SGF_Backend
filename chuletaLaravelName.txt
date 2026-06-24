@@ -1,0 +1,19 @@
+DTO: valida y tipa el input (como tu FormRequest)
+
+Service: lógica de negocio (use case)
+
+Repository: acceso a datos (DB)
+
+Guard: autorización/autenticación (tu policy/middleware)
+
+Strategy: cómo se valida el JWT (passport-jwt)
+
+Module: cableado (inyección y dependencias)
+
+El Reflector es la herramienta de NestJS que permite leer esas etiquetas desde dentro del guard.
+
+El flujo completo:
+
+
+Request → JwtAuthGuard (¿tiene JWT válido?) → RolesGuard (¿su rol está en la "nota"?) → Controller
+CanActivate es simplemente la interfaz que NestJS exige para implementar un guard: tienes que devolver true (pasa) o false/throw (bloqueado).
