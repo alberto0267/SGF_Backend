@@ -25,7 +25,7 @@ export class AuditRepository {
         (actor_id, user_id, entity_type, entity_id, action, source, ip, before_data, after_data, status, error_message)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        entry.actorId,
+        entry.actorId ?? null,
         entry.userId ?? null,
         entry.entityType,
         entry.entityId ?? null,

@@ -1,10 +1,10 @@
-import * as mysql from 'mysql2/promise';
+import { Client } from 'pg';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
-const SA1_EMAIL    = process.env.SUPERADMIN_1_EMAIL    ?? 'alberto@blancoapp.com';
+const SA1_EMAIL    = process.env.SUPERADMIN_1_EMAIL    ?? 'alberto@sgf.com';
 const SA1_PASSWORD = process.env.SUPERADMIN_1_PASSWORD ?? 'Alberto123!';
-const SA2_EMAIL    = process.env.SUPERADMIN_2_EMAIL    ?? 'backup@blancoapp.com';
+const SA2_EMAIL    = process.env.SUPERADMIN_2_EMAIL    ?? 'backup@sgf.com';
 const SA2_PASSWORD = process.env.SUPERADMIN_2_PASSWORD ?? 'Backup2Dev123!';
 
 const usingEnvVars = !!(
@@ -12,46 +12,50 @@ const usingEnvVars = !!(
   process.env.SUPERADMIN_2_EMAIL
 );
 
+async function run(db: Client, sql: string, params?: any[]) {
+  let i = 0;
+  return db.query(sql.replace(/\?/g, () => `$${++i}`), params);
+}
+
 async function seed() {
-  const db = await mysql.createConnection({
+  const db = new Client({
     host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER ?? 'diapp',
-    password: process.env.DB_PASSWORD ?? 'diapp',
-    database: process.env.DB_NAME ?? 'diapp',
-    multipleStatements: true,
+    port: Number(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER ?? 'sgf',
+    password: process.env.DB_PASSWORD ?? 'sgf',
+    database: process.env.DB_NAME ?? 'sgf',
   });
 
-  console.log('Conectado a MySQL');
+  await db.connect();
+  console.log('Conectado a PostgreSQL');
 
-  await db.query(`
-    INSERT IGNORE INTO roles (name) VALUES
+  await run(db, `
+    INSERT INTO roles (name) VALUES
       ('SuperAdmin'), ('Owner'), ('Manager'), ('Employee')
+    ON CONFLICT DO NOTHING
   `);
   console.log('Roles insertados');
 
   const companyUuid = randomUUID();
-  await db.query(
-    `INSERT IGNORE INTO companies (uuid, name, nif, address, active) VALUES (?, 'Blanco App', 'B12345678', 'Calle Mayor 1, Madrid, 28001', 1)`,
+  await run(db,
+    `INSERT INTO companies (uuid, name, nif, address, active) VALUES (?, 'Blanco App', 'B12345678', 'Calle Mayor 1, Madrid, 28001', true) ON CONFLICT DO NOTHING`,
     [companyUuid],
   );
-  const [companies]: any = await db.query(`SELECT id FROM companies WHERE nif = 'B12345678'`);
-  const companyId = companies[0].id;
+  const companyRes = await run(db, `SELECT id FROM companies WHERE nif = 'B12345678'`);
+  const companyId = companyRes.rows[0].id;
 
   const workcenterUuid = randomUUID();
-  await db.query(
-    `INSERT IGNORE INTO workcenters (uuid, name, address, email, company_id, active) VALUES (?, 'Workcenter Blanco 1', 'Calle Mayor 1, Madrid, 28001', 'workcenter1@blancoapp.com', ?, 1)`,
+  await run(db,
+    `INSERT INTO workcenters (uuid, name, address, email, company_id, active) VALUES (?, 'Workcenter Blanco 1', 'Calle Mayor 1, Madrid, 28001', 'workcenter1@blancoapp.com', ?, true) ON CONFLICT DO NOTHING`,
     [workcenterUuid, companyId],
   );
-  const [workcenters]: any = await db.query(`SELECT id FROM workcenters WHERE email = 'workcenter1@blancoapp.com'`);
-  const workcenterId = workcenters[0].id;
+  const workcenterRes = await run(db, `SELECT id FROM workcenters WHERE email = 'workcenter1@blancoapp.com'`);
+  const workcenterId = workcenterRes.rows[0].id;
 
-  const [roles]: any = await db.query(`SELECT id, name FROM roles`);
+  const rolesRes = await run(db, `SELECT id, name FROM roles`);
+  const roles = rolesRes.rows;
   const roleId = (name: string) => roles.find((r: any) => r.name === name).id;
 
-  // SuperAdmins: máximo 2 en el sistema. Solo se crean aquí, en el seed.
-  // No existe ni existirá un endpoint para crearlos — esta es la única vía.
-  // Las credenciales se leen de variables de entorno en producción.
   const users = [
     {
       email: SA1_EMAIL,
@@ -88,20 +92,19 @@ async function seed() {
   ];
 
   for (const u of users) {
-    await db.query(
-      `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+    await run(db,
+      `INSERT INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       [randomUUID(), u.email, u.password, u.roleId, companyId],
     );
-    const [rows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [u.email]);
-    const userId = rows[0].id;
+    const userRes = await run(db, `SELECT id FROM users WHERE email = ?`, [u.email]);
+    const userId = userRes.rows[0].id;
 
-    await db.query(
-      `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone, address) VALUES (?, ?, ?, ?, ?)`,
+    await run(db,
+      `INSERT INTO profiles (user_id, first_name, last_name, phone, address) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       [userId, u.firstName, u.lastName, u.phone, 'Calle Mayor 1, Madrid, 28001'],
     );
-
-    await db.query(
-      `INSERT IGNORE INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)`,
+    await run(db,
+      `INSERT INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
       [userId, workcenterId],
     );
   }
@@ -122,27 +125,25 @@ async function seed() {
 
   // ── Empresa Los Mosquitos ──────────────────────────────────────────────────
   const mosqUuid = randomUUID();
-  await db.query(
-    `INSERT IGNORE INTO companies (uuid, name, nif, address, phone, active) VALUES (?, 'Los Mosquitos S.L.', 'B98765432', 'Avenida del Sol 45, Sevilla, 41001', '954000000', 1)`,
+  await run(db,
+    `INSERT INTO companies (uuid, name, nif, address, phone, active) VALUES (?, 'Los Mosquitos S.L.', 'B98765432', 'Avenida del Sol 45, Sevilla, 41001', '954000000', true) ON CONFLICT DO NOTHING`,
     [mosqUuid],
   );
-  const [mosqCompanies]: any = await db.query(`SELECT id FROM companies WHERE nif = 'B98765432'`);
-  const mosqCompanyId = mosqCompanies[0].id;
+  const mosqCompanyRes = await run(db, `SELECT id FROM companies WHERE nif = 'B98765432'`);
+  const mosqCompanyId = mosqCompanyRes.rows[0].id;
 
-  // Owner
   const ownerHash = await bcrypt.hash('Owner123!', 10);
-  await db.query(
-    `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+  await run(db,
+    `INSERT INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
     [randomUUID(), 'owner@losmosquitos.com', ownerHash, roleId('Owner'), mosqCompanyId],
   );
-  const [ownerRows]: any = await db.query(`SELECT id FROM users WHERE email = 'owner@losmosquitos.com'`);
-  const ownerId = ownerRows[0].id;
-  await db.query(
-    `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone, address) VALUES (?, 'Carlos', 'Mosquera', '622000000', 'Avenida del Sol 45, Sevilla, 41001')`,
+  const ownerRes = await run(db, `SELECT id FROM users WHERE email = 'owner@losmosquitos.com'`);
+  const ownerId = ownerRes.rows[0].id;
+  await run(db,
+    `INSERT INTO profiles (user_id, first_name, last_name, phone, address) VALUES (?, 'Jose', 'Vivas', '622000000', 'Avenida del Sol 45, Sevilla, 41001') ON CONFLICT DO NOTHING`,
     [ownerId],
   );
 
-  // Workcenters
   const mosqWorkcenters = [
     { name: 'Franquicia 1', address: 'Calle Betis 10, Sevilla, 41010',   email: 'franquicia1@losmosquitos.com' },
     { name: 'Franquicia 2', address: 'Calle Sierpes 22, Sevilla, 41004', email: 'franquicia2@losmosquitos.com' },
@@ -152,12 +153,12 @@ async function seed() {
   const mosqWcIds: number[] = [];
   for (const wc of mosqWorkcenters) {
     const wcUuid = randomUUID();
-    await db.query(
-      `INSERT IGNORE INTO workcenters (uuid, name, address, email, company_id, active) VALUES (?, ?, ?, ?, ?, 1)`,
+    await run(db,
+      `INSERT INTO workcenters (uuid, name, address, email, company_id, active) VALUES (?, ?, ?, ?, ?, true) ON CONFLICT DO NOTHING`,
       [wcUuid, wc.name, wc.address, wc.email, mosqCompanyId],
     );
-    const [wcRows]: any = await db.query(`SELECT id FROM workcenters WHERE email = ?`, [wc.email]);
-    mosqWcIds.push(wcRows[0].id);
+    const wcRes = await run(db, `SELECT id FROM workcenters WHERE email = ?`, [wc.email]);
+    mosqWcIds.push(wcRes.rows[0].id);
   }
 
   const managerPassHash  = await bcrypt.hash('Manager123!', 10);
@@ -168,7 +169,7 @@ async function seed() {
       wcIdx: 0,
       manager: { email: 'manager1@losmosquitos.com', firstName: 'Sofía',   lastName: 'Ruiz',    phone: '633100001' },
       employees: [
-        { email: 'emp1.1@losmosquitos.com', firstName: 'Lucía',   lastName: 'Gómez',   phone: '644100001' },
+        { email: 'emp1.1@losmosquitos.com', firstName: 'Miriam',   lastName: 'Gómez',   phone: '644100001' },
         { email: 'emp1.2@losmosquitos.com', firstName: 'Pablo',   lastName: 'Martín',  phone: '644100002' },
         { email: 'emp1.3@losmosquitos.com', firstName: 'Elena',   lastName: 'Sánchez', phone: '644100003' },
         { email: 'emp1.4@losmosquitos.com', firstName: 'Marcos',  lastName: 'López',   phone: '644100004' },
@@ -202,30 +203,30 @@ async function seed() {
   for (const f of franchises) {
     const wcId = mosqWcIds[f.wcIdx];
 
-    await db.query(
-      `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+    await run(db,
+      `INSERT INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       [randomUUID(), f.manager.email, managerPassHash, roleId('Manager'), mosqCompanyId],
     );
-    const [mgRows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [f.manager.email]);
-    const mgId = mgRows[0].id;
-    await db.query(
-      `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?)`,
+    const mgRes = await run(db, `SELECT id FROM users WHERE email = ?`, [f.manager.email]);
+    const mgId = mgRes.rows[0].id;
+    await run(db,
+      `INSERT INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       [mgId, f.manager.firstName, f.manager.lastName, f.manager.phone],
     );
-    await db.query(`INSERT IGNORE INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)`, [mgId, wcId]);
+    await run(db, `INSERT INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [mgId, wcId]);
 
     for (const emp of f.employees) {
-      await db.query(
-        `INSERT IGNORE INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?)`,
+      await run(db,
+        `INSERT INTO users (uuid, email, password, role_id, company_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
         [randomUUID(), emp.email, employeePassHash, roleId('Employee'), mosqCompanyId],
       );
-      const [empRows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [emp.email]);
-      const empId = empRows[0].id;
-      await db.query(
-        `INSERT IGNORE INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?)`,
+      const empRes = await run(db, `SELECT id FROM users WHERE email = ?`, [emp.email]);
+      const empId = empRes.rows[0].id;
+      await run(db,
+        `INSERT INTO profiles (user_id, first_name, last_name, phone) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
         [empId, emp.firstName, emp.lastName, emp.phone],
       );
-      await db.query(`INSERT IGNORE INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)`, [empId, wcId]);
+      await run(db, `INSERT INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [empId, wcId]);
     }
   }
 
@@ -238,16 +239,16 @@ async function seed() {
   console.log('  emp1.1 … emp3.5 @losmosquitos.com / Empleado123! (15 empleados)');
 
   // ── Horas extras (Los Mosquitos S.L.) ────────────────────────────────────
-  const [mg1Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager1@losmosquitos.com'`);
-  const [mg2Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager2@losmosquitos.com'`);
-  const [mg3Res]: any = await db.query(`SELECT id FROM users WHERE email = 'manager3@losmosquitos.com'`);
-  const mgId1 = mg1Res[0].id;
-  const mgId2 = mg2Res[0].id;
-  const mgId3 = mg3Res[0].id;
+  const mg1Res = await run(db, `SELECT id FROM users WHERE email = 'manager1@losmosquitos.com'`);
+  const mg2Res = await run(db, `SELECT id FROM users WHERE email = 'manager2@losmosquitos.com'`);
+  const mg3Res = await run(db, `SELECT id FROM users WHERE email = 'manager3@losmosquitos.com'`);
+  const mgId1 = mg1Res.rows[0].id;
+  const mgId2 = mg2Res.rows[0].id;
+  const mgId3 = mg3Res.rows[0].id;
 
   const getEmpId = async (email: string): Promise<number> => {
-    const [rows]: any = await db.query(`SELECT id FROM users WHERE email = ?`, [email]);
-    return rows[0].id;
+    const result = await run(db, `SELECT id FROM users WHERE email = ?`, [email]);
+    return result.rows[0].id;
   };
 
   const emp1Ids = await Promise.all(
@@ -270,22 +271,26 @@ async function seed() {
     approvedById?: number,
   ): Promise<void> => {
     const uuid = randomUUID();
-    const [res]: any = await db.query(
-      `INSERT INTO overtime_requests (uuid, workcenter_id, requested_by, date, reason) VALUES (?, ?, ?, ?, ?)`,
+    const res = await run(db,
+      `INSERT INTO overtime_requests (uuid, workcenter_id, requested_by, date, reason) VALUES (?, ?, ?, ?, ?) RETURNING id`,
       [uuid, workcenterId, managerId, date, reason],
     );
-    const reqId: number = res.insertId;
+    const reqId: number = res.rows[0].id;
 
     for (const item of items) {
-      await db.query(
+      await run(db,
         `INSERT INTO overtime_request_items (request_id, employee_id, hours) VALUES (?, ?, ?)`,
         [reqId, item.employeeId, item.hours],
       );
     }
 
     if (status !== 'pending') {
-      await db.query(
+      await run(db,
         `UPDATE overtime_requests SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?`,
+        [status, approvedById ?? null, `${date} 16:00:00`, reqId],
+      );
+      await run(db,
+        `UPDATE overtime_request_items SET status = ?, approved_by = ?, approved_at = ? WHERE request_id = ?`,
         [status, approvedById ?? null, `${date} 16:00:00`, reqId],
       );
     }
@@ -295,10 +300,10 @@ async function seed() {
       const year = d.getFullYear();
       const month = d.getMonth() + 1;
       for (const item of items) {
-        await db.query(
+        await run(db,
           `INSERT INTO overtime_accumulation (employee_id, year, month, total_hours)
            VALUES (?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE total_hours = total_hours + VALUES(total_hours)`,
+           ON CONFLICT (employee_id, year, month) DO UPDATE SET total_hours = overtime_accumulation.total_hours + EXCLUDED.total_hours`,
           [item.employeeId, year, month, item.hours],
         );
       }
@@ -343,6 +348,59 @@ async function seed() {
   console.log('  Franquicia 1: 5 solicitudes — 3 aprobadas, 1 rechazada, 1 pendiente');
   console.log('  Franquicia 2: 3 solicitudes — 2 aprobadas, 1 pendiente');
   console.log('  Franquicia 3: 2 solicitudes — 1 aprobada, 1 pendiente');
+
+  // ── Cash register: un cierre por empleado ────────────────────────────────
+  const round = (n: number) => Math.round(n * 100) / 100;
+
+  const insertCierre = async (
+    wcId: number,
+    empId: number,
+    date: string,
+    efectivo: number,
+    nRet: number,
+    datafono: number,
+    cTarjeta: number,
+    difArqueoEf: number,
+    retiradaValor = 500,
+  ): Promise<void> => {
+    const difDatafono = round(datafono - cTarjeta);
+    const difTotal = round(difDatafono + difArqueoEf);
+    const retiradas = round(nRet * retiradaValor);
+    const tVentas = round(retiradas + cTarjeta + efectivo);
+    const tEfectivo = round(retiradas + efectivo);
+
+    await run(db,
+      `INSERT INTO cash_register_closures
+        (uuid, workcenter_id, employee_id, date, efectivo, n_ret, datafono, c_tarjeta, dif_arqueo_ef,
+         retirada_valor, dif_datafono, dif_total, retiradas, t_ventas, t_efectivo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT DO NOTHING`,
+      [randomUUID(), wcId, empId, date, efectivo, nRet, datafono, cTarjeta, difArqueoEf,
+        retiradaValor, difDatafono, difTotal, retiradas, tVentas, tEfectivo],
+    );
+  };
+
+  const blancoEmpId = await getEmpId('empleado@blancoapp.com');
+  const todosLosEmpleados = [
+    { wcId: workcenterId, empId: blancoEmpId },
+    ...emp1Ids.map((empId) => ({ wcId: mosqWcIds[0], empId })),
+    ...emp2Ids.map((empId) => ({ wcId: mosqWcIds[1], empId })),
+    ...emp3Ids.map((empId) => ({ wcId: mosqWcIds[2], empId })),
+  ];
+
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  for (const [i, e] of todosLosEmpleados.entries()) {
+    const efectivo = round(80 + i * 12.3);
+    const nRet = 1 + (i % 3);
+    const datafono = round(300 + i * 18.7);
+    const cTarjeta = i % 4 === 0 ? round(datafono - 5) : datafono;
+    const difArqueoEf = i % 5 === 0 ? -1.5 : 0;
+    await insertCierre(e.wcId, e.empId, hoy, efectivo, nRet, datafono, cTarjeta, difArqueoEf);
+  }
+
+  console.log('');
+  console.log(`Cierres de caja seed: ${todosLosEmpleados.length} cierres (uno por empleado) para el ${hoy}`);
 
   await db.end();
 }

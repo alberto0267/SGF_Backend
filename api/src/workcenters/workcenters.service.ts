@@ -30,6 +30,12 @@ export class WorkcentersService {
     return { data, total, page: filters.page, limit: filters.limit, totalPages: Math.ceil(total / filters.limit) };
   }
 
+  async findMineLookup(userId: number) {
+    const companyId = await this.userRepo.findCompanyIdByUserId(userId);
+    if (!companyId) throw new NotFoundException('Empresa no encontrada');
+    return this.workcenterRepo.findNamesByCompany(companyId);
+  }
+
   async create(dto: CreateWorkcenterDto, actorId: number, ip: string, source: 'web' | 'app') {
     const company = await this.companyRepo.findByUuid(dto.companyUuid);
     if (!company) {

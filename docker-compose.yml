@@ -1,17 +1,16 @@
 services:
   db:
-    image: mysql:8.0
-    container_name: diapp-mysql
+    image: postgres:16
+    container_name: sgf-postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: diapp
-      MYSQL_USER: diapp
-      MYSQL_PASSWORD: diapp
+      POSTGRES_DB: sgf
+      POSTGRES_USER: sgf
+      POSTGRES_PASSWORD: sgf
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  mysql_data:
+  postgres_data:

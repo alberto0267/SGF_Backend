@@ -21,7 +21,7 @@ export class UsersController {
   @Get()
   @Roles('SuperAdmin', 'Owner', 'Manager')
   findByCompany(@Query() query: QueryUserDto, @CurrentUser() user: JwtPayload) {
-    return this.usersService.findByCompany(user, query.companyUuid);
+    return this.usersService.findByCompany(user, query.companyUuid, query.search, query.workcenterUuid);
   }
 
   @Get(':uuid')

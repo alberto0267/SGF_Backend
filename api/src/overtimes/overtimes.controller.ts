@@ -5,7 +5,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 import { CreateOvertimeRequestDto } from './dto/create-overtime-request.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { QueryAccumulationDto } from './dto/query-accumulation.dto';
 import { QueryOvertimeDto } from './dto/query-overtime.dto';
+import { QueryPaymentDto } from './dto/query-payment.dto';
 import { OvertimesService } from './overtimes.service';
 
 @Controller('overtimes')
@@ -26,16 +29,47 @@ export class OvertimesController {
     return this.overtimesService.findAll(user.id, user.role, query);
   }
 
+  @Get('mine')
+  @Roles('Employee', 'Manager')
+  findMine(@Query() query: QueryOvertimeDto, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.findMine(user.id, { month: query.month, year: query.year });
+  }
+
   @Get('accumulation')
   @Roles('Owner', 'Manager')
-  findAccumulation(@Query() query: QueryOvertimeDto, @CurrentUser() user: JwtPayload) {
-    return this.overtimesService.findAccumulation(user.id, user.role, { month: query.month, year: query.year });
+  findAccumulation(@Query() query: QueryAccumulationDto, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.findAccumulation(user.id, user.role, query);
+  }
+
+  @Get('accumulation/monthly')
+  @Roles('Owner')
+  findMonthlySummary(@Query() query: QueryOvertimeDto, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.findMonthlySummary(user.id, query.year);
   }
 
   @Get('approved-detail')
   @Roles('Owner', 'Manager')
   findApprovedDetail(@Query() query: QueryOvertimeDto, @CurrentUser() user: JwtPayload) {
     return this.overtimesService.findApprovedDetail(user.id, user.role, { month: query.month, year: query.year });
+  }
+
+  @Post('payments')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles('Owner')
+  registerPayment(@Body() dto: CreatePaymentDto, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.registerPayment(user.id, dto);
+  }
+
+  @Get('payments')
+  @Roles('Owner')
+  findPayments(@Query() query: QueryPaymentDto, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.findPayments(user.id, query);
+  }
+
+  @Get(':uuid')
+  @Roles('Owner', 'Manager')
+  findOne(@Param('uuid') uuid: string, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.findOne(uuid, user.id, user.role);
   }
 
   @Patch(':uuid/approve')
@@ -50,5 +84,19 @@ export class OvertimesController {
   @Roles('Owner')
   reject(@Param('uuid') uuid: string, @CurrentUser() user: JwtPayload) {
     return this.overtimesService.reject(uuid, user.id);
+  }
+
+  @Patch(':uuid/employees/:employeeUuid/approve')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles('Owner')
+  approveItem(@Param('uuid') uuid: string, @Param('employeeUuid') employeeUuid: string, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.approveItem(uuid, employeeUuid, user.id);
+  }
+
+  @Patch(':uuid/employees/:employeeUuid/reject')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles('Owner')
+  rejectItem(@Param('uuid') uuid: string, @Param('employeeUuid') employeeUuid: string, @CurrentUser() user: JwtPayload) {
+    return this.overtimesService.rejectItem(uuid, employeeUuid, user.id);
   }
 }

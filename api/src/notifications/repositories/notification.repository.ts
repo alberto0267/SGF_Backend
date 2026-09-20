@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { DatabaseService } from '../../database/database.service';
 
 type QueryRunner = <R = any>(sql: string, params?: any[]) => Promise<R>;
@@ -13,31 +12,41 @@ export class NotificationRepository {
     return this.db.query<R>(sql, params);
   }
 
-  async create(userId: number, title: string, message: string, q?: QueryRunner): Promise<number> {
-    const result = await this.run<ResultSetHeader>(
+  async create(
+    userId: number,
+    title: string,
+    message: string,
+    overtimeRequestId?: number,
+    q?: QueryRunner,
+  ): Promise<number> {
+    const rows = await this.run<{ id: number }[]>(
       q,
-      'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
-      [userId, title, message],
+      'INSERT INTO notifications (user_id, title, message, overtime_request_id) VALUES (?, ?, ?, ?) RETURNING id',
+      [userId, title, message, overtimeRequestId ?? null],
     );
-    return result.insertId;
+    return rows[0].id;
   }
 
-  async findByUser(userId: number): Promise<RowDataPacket[]> {
-    return this.db.query<RowDataPacket[]>(
-      'SELECT id, title, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC',
+  async findByUser(userId: number): Promise<any[]> {
+    return this.db.query<any[]>(
+      `SELECT n.id, n.title, n.message, n.is_read, n.created_at, o.uuid AS overtime_request_uuid
+       FROM notifications n
+       LEFT JOIN overtime_requests o ON o.id = n.overtime_request_id
+       WHERE n.user_id = ?
+       ORDER BY n.created_at DESC`,
       [userId],
     );
   }
 
   async markAsRead(id: number, userId: number): Promise<boolean> {
-    const result = await this.db.query<ResultSetHeader>(
-      'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
+    const rows = await this.db.query<{ id: number }[]>(
+      'UPDATE notifications SET is_read = true WHERE id = ? AND user_id = ? RETURNING id',
       [id, userId],
     );
-    return result.affectedRows > 0;
+    return rows.length > 0;
   }
 
   async markAllAsRead(userId: number): Promise<void> {
-    await this.db.query('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0', [userId]);
+    await this.db.query('UPDATE notifications SET is_read = true WHERE user_id = ? AND is_read = false', [userId]);
   }
 }

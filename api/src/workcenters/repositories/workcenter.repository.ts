@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { DatabaseService } from '../../database/database.service';
 
 type QueryRunner = <R = any>(sql: string, params?: any[]) => Promise<R>;
@@ -22,26 +21,26 @@ export class WorkcenterRepository {
   }
 
   async create(data: CreateWorkcenterData, q?: QueryRunner): Promise<number> {
-    const result = await this.run<ResultSetHeader>(
+    const rows = await this.run<{ id: number }[]>(
       q,
-      'INSERT INTO workcenters (uuid, name, address, email, company_id) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO workcenters (uuid, name, address, email, company_id) VALUES (?, ?, ?, ?, ?) RETURNING id',
       [data.uuid, data.name, data.address, data.email, data.companyId],
     );
-    return result.insertId;
+    return rows[0].id;
   }
 
   async findByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; company_id: number } | null> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id, company_id FROM workcenters WHERE uuid = ?', [uuid]);
-    return (rows[0] as { id: number; company_id: number }) ?? null;
+    const rows = await this.run<{ id: number; company_id: number }[]>(q, 'SELECT id, company_id FROM workcenters WHERE uuid = ?', [uuid]);
+    return rows[0] ?? null;
   }
 
-  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; name: string; address: string | null; email: string | null; company_id: number; active: number } | null> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id, uuid, name, address, email, company_id, active FROM workcenters WHERE uuid = ?', [uuid]);
-    return (rows[0] as any) ?? null;
+  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; name: string; address: string | null; email: string | null; company_id: number; active: boolean } | null> {
+    const rows = await this.run<any[]>(q, 'SELECT id, uuid, name, address, email, company_id, active FROM workcenters WHERE uuid = ?', [uuid]);
+    return rows[0] ?? null;
   }
 
   async existsByEmailExcluding(email: string, workcenterId: number, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM workcenters WHERE email = ? AND id != ?', [email, workcenterId]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM workcenters WHERE email = ? AND id != ?', [email, workcenterId]);
     return rows.length > 0;
   }
 
@@ -60,7 +59,7 @@ export class WorkcenterRepository {
     await this.run(q, 'DELETE FROM workcenters WHERE id = ?', [id]);
   }
 
-  async findAll(filters: { name?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+  async findAll(filters: { name?: string; page: number; limit: number }): Promise<{ data: any[]; total: number }> {
     const where: string[] = [];
     const params: unknown[] = [];
 
@@ -73,7 +72,7 @@ export class WorkcenterRepository {
     const offset = (filters.page - 1) * filters.limit;
 
     const [data, countRows] = await Promise.all([
-      this.db.query<RowDataPacket[]>(
+      this.db.query<any[]>(
         `SELECT w.uuid, w.name, w.address, w.email, w.active, w.created_at,
                 c.name AS company, c.uuid AS company_uuid,
                 COUNT(uw.user_id) AS worker_count
@@ -81,20 +80,27 @@ export class WorkcenterRepository {
          JOIN companies c ON c.id = w.company_id
          LEFT JOIN user_workcenters uw ON uw.workcenter_id = w.id
          ${whereClause}
-         GROUP BY w.id
+         GROUP BY w.id, c.id
          ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
         [...params, filters.limit, offset],
       ),
-      this.db.query<RowDataPacket[]>(
+      this.db.query<any[]>(
         `SELECT COUNT(*) AS total FROM workcenters w ${whereClause}`,
         params,
       ),
     ]);
 
-    return { data, total: countRows[0]['total'] as number };
+    return { data, total: Number(countRows[0]['total']) };
   }
 
-  async findAllByCompany(companyId: number, filters: { name?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+  async findNamesByCompany(companyId: number): Promise<{ uuid: string; name: string }[]> {
+    return this.db.query<{ uuid: string; name: string }[]>(
+      'SELECT uuid, name FROM workcenters WHERE company_id = ? ORDER BY name',
+      [companyId],
+    );
+  }
+
+  async findAllByCompany(companyId: number, filters: { name?: string; page: number; limit: number }): Promise<{ data: any[]; total: number }> {
     const where: string[] = ['w.company_id = ?'];
     const params: unknown[] = [companyId];
 
@@ -107,8 +113,8 @@ export class WorkcenterRepository {
     const offset = (filters.page - 1) * filters.limit;
 
     const [data, countRows] = await Promise.all([
-      this.db.query<RowDataPacket[]>(
-        `SELECT w.uuid, w.name, w.address, w.email, w.active, w.created_at,
+      this.db.query<any[]>(
+        `SELECT w.id, w.uuid, w.name, w.address, w.email, w.active, w.created_at,
                 COUNT(uw.user_id) AS worker_count
          FROM workcenters w
          LEFT JOIN user_workcenters uw ON uw.workcenter_id = w.id
@@ -117,12 +123,12 @@ export class WorkcenterRepository {
          ORDER BY w.created_at DESC LIMIT ? OFFSET ?`,
         [...params, filters.limit, offset],
       ),
-      this.db.query<RowDataPacket[]>(
+      this.db.query<any[]>(
         `SELECT COUNT(*) AS total FROM workcenters w ${whereClause}`,
         params,
       ),
     ]);
 
-    return { data, total: countRows[0]['total'] as number };
+    return { data, total: Number(countRows[0]['total']) };
   }
 }

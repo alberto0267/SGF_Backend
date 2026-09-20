@@ -5,8 +5,8 @@ import { NotificationRepository } from './repositories/notification.repository';
 export class NotificationsService {
   constructor(private readonly notificationRepo: NotificationRepository) {}
 
-  async notify(userId: number, title: string, message: string): Promise<void> {
-    await this.notificationRepo.create(userId, title, message);
+  async notify(userId: number, title: string, message: string, overtimeRequestId?: number): Promise<void> {
+    await this.notificationRepo.create(userId, title, message, overtimeRequestId);
   }
 
   async findMine(userId: number) {

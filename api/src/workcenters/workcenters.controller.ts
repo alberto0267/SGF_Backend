@@ -28,6 +28,12 @@ export class WorkcentersController {
     return this.workcentersService.findMine(user.id, { name: query.name, page: query.page ?? 1, limit: query.limit ?? 20 });
   }
 
+  @Get('mine/lookup')
+  @Roles('Owner')
+  findMineLookup(@CurrentUser() user: JwtPayload) {
+    return this.workcentersService.findMineLookup(user.id);
+  }
+
   @Post('create-workcenters')
   @HttpCode(HttpStatus.CREATED)
   @Roles('SuperAdmin')

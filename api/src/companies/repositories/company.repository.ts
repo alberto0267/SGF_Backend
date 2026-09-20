@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { DatabaseService } from '../../database/database.service';
 
 type QueryRunner = <R = any>(sql: string, params?: any[]) => Promise<R>;
@@ -30,40 +29,40 @@ export class CompanyRepository {
   }
 
   async existsByNif(nif: string, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM companies WHERE nif = ?', [nif]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM companies WHERE nif = ?', [nif]);
     return rows.length > 0;
   }
 
   async create(data: CreateCompanyData, q?: QueryRunner): Promise<number> {
-    const result = await this.run<ResultSetHeader>(
+    const rows = await this.run<{ id: number }[]>(
       q,
-      'INSERT INTO companies (uuid, name, nif, address, phone) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO companies (uuid, name, nif, address, phone) VALUES (?, ?, ?, ?, ?) RETURNING id',
       [data.uuid, data.name, data.nif, data.address, data.phone ?? null],
     );
-    return result.insertId;
+    return rows[0].id;
   }
 
   async findByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number } | null> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM companies WHERE uuid = ?', [uuid]);
-    return (rows[0] as { id: number }) ?? null;
+    const rows = await this.run<{ id: number }[]>(q, 'SELECT id FROM companies WHERE uuid = ?', [uuid]);
+    return rows[0] ?? null;
   }
 
   async createWorkCenter(data: CreateWorkCenterData, q?: QueryRunner): Promise<number> {
-    const result = await this.run<ResultSetHeader>(
+    const rows = await this.run<{ id: number }[]>(
       q,
-      'INSERT INTO workcenters (uuid, name, company_id, address, email) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO workcenters (uuid, name, company_id, address, email) VALUES (?, ?, ?, ?, ?) RETURNING id',
       [data.uuid, data.name, data.companyId, data.address ?? null, data.email ?? null],
     );
-    return result.insertId;
+    return rows[0].id;
   }
 
-  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; name: string; nif: string; address: string; phone: string | null; active: number } | null> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id, uuid, name, nif, address, phone, active FROM companies WHERE uuid = ?', [uuid]);
-    return (rows[0] as any) ?? null;
+  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; name: string; nif: string; address: string; phone: string | null; active: boolean } | null> {
+    const rows = await this.run<any[]>(q, 'SELECT id, uuid, name, nif, address, phone, active FROM companies WHERE uuid = ?', [uuid]);
+    return rows[0] ?? null;
   }
 
   async existsByNifExcluding(nif: string, companyId: number, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM companies WHERE nif = ? AND id != ?', [nif, companyId]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM companies WHERE nif = ? AND id != ?', [nif, companyId]);
     return rows.length > 0;
   }
 
@@ -78,24 +77,27 @@ export class CompanyRepository {
   }
 
   async setActive(id: number, active: boolean, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE companies SET active = ? WHERE id = ?', [active ? 1 : 0, id]);
+    await this.run(q, 'UPDATE companies SET active = ? WHERE id = ?', [active, id]);
   }
 
   async setUsersActive(companyId: number, active: boolean, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE users SET active = ? WHERE company_id = ?', [active ? 1 : 0, companyId]);
+    await this.run(q, 'UPDATE users SET active = ? WHERE company_id = ?', [active, companyId]);
   }
 
   async setWorkcentersActive(companyId: number, active: boolean, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE workcenters SET active = ? WHERE company_id = ?', [active ? 1 : 0, companyId]);
+    await this.run(q, 'UPDATE workcenters SET active = ? WHERE company_id = ?', [active, companyId]);
   }
 
   async revokeTokensByCompanyId(companyId: number, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE refresh_tokens rt JOIN users u ON u.id = rt.user_id SET rt.revoked = 1 WHERE u.company_id = ?', [companyId]);
+    await this.run(q,
+      'UPDATE refresh_tokens SET revoked = true FROM users WHERE users.id = refresh_tokens.user_id AND users.company_id = ?',
+      [companyId],
+    );
   }
 
   async getUserIdsByCompanyId(companyId: number, q?: QueryRunner): Promise<number[]> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM users WHERE company_id = ?', [companyId]);
-    return rows.map((r) => r['id'] as number);
+    const rows = await this.run<{ id: number }[]>(q, 'SELECT id FROM users WHERE company_id = ?', [companyId]);
+    return rows.map((r) => r.id);
   }
 
   async deleteUserWorkcenters(userIds: number[], q?: QueryRunner): Promise<void> {
@@ -162,8 +164,8 @@ export class CompanyRepository {
     await this.run(q, 'DELETE FROM companies WHERE id = ?', [id]);
   }
 
-  async findAllForSelect(filters: { name?: string; nif?: string }): Promise<RowDataPacket[]> {
-    const where: string[] = ['active = 1'];
+  async findAllForSelect(filters: { name?: string; nif?: string }): Promise<any[]> {
+    const where: string[] = ['active = true'];
     const params: unknown[] = [];
 
     if (filters.name) {
@@ -175,13 +177,13 @@ export class CompanyRepository {
       params.push(`%${filters.nif}%`);
     }
 
-    return this.db.query<RowDataPacket[]>(
+    return this.db.query<any[]>(
       `SELECT uuid, name, nif FROM companies WHERE ${where.join(' AND ')} ORDER BY name ASC`,
       params,
     );
   }
 
-  async findAll(filters: { name?: string; nif?: string; page: number; limit: number }): Promise<{ data: RowDataPacket[]; total: number }> {
+  async findAll(filters: { name?: string; nif?: string; page: number; limit: number }): Promise<{ data: any[]; total: number }> {
     const where: string[] = [];
     const params: unknown[] = [];
 
@@ -198,7 +200,7 @@ export class CompanyRepository {
     const offset = (filters.page - 1) * filters.limit;
 
     const [data, countRows] = await Promise.all([
-      this.db.query<RowDataPacket[]>(
+      this.db.query<any[]>(
         `SELECT c.uuid, c.name, c.nif, c.address, c.phone, c.active, c.created_at,
                 COUNT(DISTINCT u.id) AS user_count,
                 COUNT(DISTINCT w.id) AS workcenter_count
@@ -210,12 +212,12 @@ export class CompanyRepository {
          ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
         [...params, filters.limit, offset],
       ),
-      this.db.query<RowDataPacket[]>(
+      this.db.query<any[]>(
         `SELECT COUNT(*) AS total FROM companies c ${whereClause}`,
         params,
       ),
     ]);
 
-    return { data, total: countRows[0]['total'] as number };
+    return { data, total: Number(countRows[0]['total']) };
   }
 }

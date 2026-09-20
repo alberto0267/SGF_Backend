@@ -1,18 +1,18 @@
-import * as mysql from 'mysql2/promise';
+import { Client } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 
 async function migrate() {
-  const db = await mysql.createConnection({
+  const db = new Client({
     host: process.env.DB_HOST ?? 'localhost',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER ?? 'diapp',
-    password: process.env.DB_PASSWORD ?? 'diapp',
-    database: process.env.DB_NAME ?? 'diapp',
-    multipleStatements: true,
+    port: Number(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USER ?? 'sgf',
+    password: process.env.DB_PASSWORD ?? 'sgf',
+    database: process.env.DB_NAME ?? 'sgf',
   });
 
-  console.log('Conectado a MySQL');
+  await db.connect();
+  console.log('Conectado a PostgreSQL');
 
   const migrationsDir = path.join(__dirname, 'migrations');
   const files = fs.readdirSync(migrationsDir)

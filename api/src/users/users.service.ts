@@ -25,28 +25,35 @@ export class UsersService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll() {
-    return this.userRepo.findAll();
+  async findAll(search?: string) {
+    return this.userRepo.findAll(search);
   }
 
-  async findByCompany(currentUser: JwtPayload, companyUuid?: string) {
+  async findByCompany(currentUser: JwtPayload, companyUuid?: string, search?: string, workcenterUuid?: string) {
+    let workcenterId: number | undefined;
+    if (workcenterUuid) {
+      const workcenter = await this.workcenterRepo.findByUuid(workcenterUuid);
+      if (!workcenter) throw new NotFoundException('Centro de trabajo no encontrado');
+      workcenterId = workcenter.id;
+    }
+
     if (currentUser.role === 'SuperAdmin') {
       if (companyUuid) {
         const company = await this.companyRepo.findByUuid(companyUuid);
         if (!company) throw new NotFoundException('Empresa no encontrada');
-        return this.userRepo.findByCompanyId(company.id);
+        return this.userRepo.findByCompanyId(company.id, undefined, search, workcenterId);
       }
-      return this.userRepo.findAll();
+      return this.userRepo.findAll(search, workcenterId);
     }
 
     if (currentUser.role === 'Manager') {
       const workcenterIds = await this.userRepo.findWorkcenterIdsByUserId(currentUser.id);
-      return this.userRepo.findByWorkcenterIds(workcenterIds);
+      return this.userRepo.findByWorkcenterIds(workcenterIds, search, workcenterId);
     }
 
     const companyId = await this.userRepo.findCompanyIdByUserId(currentUser.id);
     if (!companyId) throw new NotFoundException('El usuario no tiene empresa asignada');
-    return this.userRepo.findByCompanyId(companyId);
+    return this.userRepo.findByCompanyId(companyId, undefined, search, workcenterId);
   }
 
   async findOneByUuid(uuid: string, currentUser: JwtPayload) {

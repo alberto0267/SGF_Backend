@@ -1,15 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { DatabaseService } from '../../database/database.service';
 
 type QueryRunner = <R = any>(sql: string, params?: any[]) => Promise<R>;
 
-export interface UserRow extends RowDataPacket {
+export interface UserRow {
   id: number;
   uuid: string;
   email: string;
   password: string;
-  active: number;
+  active: boolean;
   failed_login_attempts: number;
   locked_until: Date | null;
   role_name: string;
@@ -43,8 +42,6 @@ export class UserRepository {
     if (q) return q<R>(sql, params);
     return this.db.query<R>(sql, params);
   }
-
-  // ─── Queries de autenticación ─────────────────────────────────────────────
 
   async findByEmail(email: string): Promise<UserRow | null> {
     const rows = await this.db.query<UserRow[]>(
@@ -83,7 +80,7 @@ export class UserRepository {
        FROM refresh_tokens rt
        JOIN users u ON u.id = rt.user_id
        JOIN roles r ON r.id = u.role_id
-       WHERE rt.token_hash = ? AND rt.revoked = 0 AND rt.expires_at > NOW()`,
+       WHERE rt.token_hash = ? AND rt.revoked = false AND rt.expires_at > NOW()`,
       [tokenHash],
     );
     return rows[0] ?? null;
@@ -112,68 +109,65 @@ export class UserRepository {
 
   async revokeRefreshToken(tokenHash: string): Promise<void> {
     await this.db.query(
-      'UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?',
+      'UPDATE refresh_tokens SET revoked = true WHERE token_hash = ?',
       [tokenHash],
     );
   }
 
   async revokeAllTokensByUuid(uuid: string): Promise<void> {
     await this.db.query(
-      `UPDATE refresh_tokens rt
-       JOIN users u ON u.id = rt.user_id
-       SET rt.revoked = 1
-       WHERE u.uuid = ?`,
+      `UPDATE refresh_tokens SET revoked = true
+       FROM users
+       WHERE users.id = refresh_tokens.user_id AND users.uuid = ?`,
       [uuid],
     );
   }
 
-  // ─── Queries usadas en transacciones (aceptan QueryRunner externo) ─────────
-
   async existsByEmail(email: string, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM users WHERE email = ?', [email]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM users WHERE email = ?', [email]);
     return rows.length > 0;
   }
 
   async existsByEmailExcluding(email: string, userId: number, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM users WHERE email = ? AND id != ?', [email, userId]);
     return rows.length > 0;
   }
 
   async existsByDni(dni: string, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM profiles WHERE dni = ?', [dni]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM profiles WHERE dni = ?', [dni]);
     return rows.length > 0;
   }
 
   async existsByDniExcluding(dni: string, userId: number, q?: QueryRunner): Promise<boolean> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM profiles WHERE dni = ? AND user_id != ?', [dni, userId]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM profiles WHERE dni = ? AND user_id != ?', [dni, userId]);
     return rows.length > 0;
   }
 
   async findRoleIdByName(name: string, q?: QueryRunner): Promise<number | null> {
-    const rows = await this.run<RowDataPacket[]>(q, 'SELECT id FROM roles WHERE name = ?', [name]);
+    const rows = await this.run<any[]>(q, 'SELECT id FROM roles WHERE name = ?', [name]);
     return (rows[0]?.['id'] as number) ?? null;
   }
 
   async create(data: CreateUserData, q?: QueryRunner): Promise<number> {
-    const result = await this.run<ResultSetHeader>(
+    const rows = await this.run<{ id: number }[]>(
       q,
-      'INSERT INTO users (email, password, role_id, company_id, uuid) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO users (email, password, role_id, company_id, uuid) VALUES (?, ?, ?, ?, ?) RETURNING id',
       [data.email, data.password, data.roleId, data.companyId, data.uuid],
     );
-    return result.insertId;
+    return rows[0].id;
   }
 
   async countByRoleName(roleName: string, q?: QueryRunner): Promise<number> {
-    const rows = await this.run<RowDataPacket[]>(
+    const rows = await this.run<any[]>(
       q,
       `SELECT COUNT(*) AS cnt FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = ?`,
       [roleName],
     );
-    return (rows[0]?.['cnt'] as number) ?? 0;
+    return Number(rows[0]?.['cnt']) ?? 0;
   }
 
   async createProfile(data: CreateProfileData, q?: QueryRunner): Promise<void> {
-    await this.run<ResultSetHeader>(
+    await this.run(
       q,
       'INSERT INTO profiles (user_id, first_name, last_name, dni, phone, address) VALUES (?, ?, ?, ?, ?, ?)',
       [data.userId, data.firstName, data.lastName, data.dni ?? null, data.phone ?? null, data.address ?? null],
@@ -181,20 +175,20 @@ export class UserRepository {
   }
 
   async findCompanyIdByUserId(userId: number): Promise<number | null> {
-    const rows = await this.db.query<RowDataPacket[]>('SELECT company_id FROM users WHERE id = ?', [userId]);
+    const rows = await this.db.query<any[]>('SELECT company_id FROM users WHERE id = ?', [userId]);
     return (rows[0]?.['company_id'] as number) ?? null;
   }
 
   async assignWorkcenter(userId: number, workcenterId: number, q?: QueryRunner): Promise<void> {
-    await this.run<ResultSetHeader>(
+    await this.run(
       q,
       'INSERT INTO user_workcenters (user_id, workcenter_id) VALUES (?, ?)',
       [userId, workcenterId],
     );
   }
 
-  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; email: string; active: number; role_name: string; company_id: number; first_name: string | null; last_name: string | null; dni: string | null; phone: string | null; address: string | null; workcenter_uuid: string | null; workcenter_name: string | null } | null> {
-    const rows = await this.run<RowDataPacket[]>(
+  async findFullByUuid(uuid: string, q?: QueryRunner): Promise<{ id: number; uuid: string; email: string; active: boolean; role_name: string; company_id: number; first_name: string | null; last_name: string | null; dni: string | null; phone: string | null; address: string | null; workcenter_uuid: string | null; workcenter_name: string | null } | null> {
+    const rows = await this.run<any[]>(
       q,
       `SELECT u.id, u.uuid, u.email, u.active, u.company_id, r.name AS role_name,
               p.first_name, p.last_name, p.dni, p.phone, p.address,
@@ -206,7 +200,7 @@ export class UserRepository {
        WHERE u.uuid = ?`,
       [uuid],
     );
-    return (rows[0] as any) ?? null;
+    return rows[0] ?? null;
   }
 
   async updateEmail(userId: number, email: string, q?: QueryRunner): Promise<void> {
@@ -234,19 +228,24 @@ export class UserRepository {
   }
 
   async setActive(userId: number, active: boolean, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE users SET active = ? WHERE id = ?', [active ? 1 : 0, userId]);
+    await this.run(q, 'UPDATE users SET active = ? WHERE id = ?', [active, userId]);
   }
 
   async revokeTokensByUserId(userId: number, q?: QueryRunner): Promise<void> {
-    await this.run(q, 'UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?', [userId]);
+    await this.run(q, 'UPDATE refresh_tokens SET revoked = true WHERE user_id = ?', [userId]);
   }
 
   async deleteUser(userId: number, q?: QueryRunner): Promise<void> {
     await this.run(q, 'DELETE FROM users WHERE id = ?', [userId]);
   }
 
-  async findAll(): Promise<RowDataPacket[]> {
-    return this.db.query<RowDataPacket[]>(
+  async findAll(search?: string, workcenterId?: number): Promise<any[]> {
+    const joinWorkcenter = workcenterId ? 'JOIN user_workcenters uwf ON uwf.user_id = u.id AND uwf.workcenter_id = ?' : '';
+    const where = search ? 'WHERE (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.dni ILIKE ? OR u.email ILIKE ?)' : '';
+    const params: any[] = [];
+    if (workcenterId) params.push(workcenterId);
+    if (search) params.push(...Array(4).fill(`%${search}%`));
+    return this.db.query<any[]>(
       `SELECT u.uuid, u.email, u.active, u.created_at,
               r.name AS role,
               c.name AS company,
@@ -257,12 +256,21 @@ export class UserRepository {
        JOIN roles r ON r.id = u.role_id
        LEFT JOIN companies c ON c.id = u.company_id
        LEFT JOIN profiles p ON p.user_id = u.id
+       ${joinWorkcenter}
+       ${where}
        ORDER BY u.created_at DESC`,
+      params,
     );
   }
 
-  async findByCompanyId(companyId: number, q?: QueryRunner): Promise<RowDataPacket[]> {
-    return this.run<RowDataPacket[]>(
+  async findByCompanyId(companyId: number, q?: QueryRunner, search?: string, workcenterId?: number): Promise<any[]> {
+    const joinWorkcenter = workcenterId ? 'JOIN user_workcenters uwf ON uwf.user_id = u.id AND uwf.workcenter_id = ?' : '';
+    const searchClause = search ? 'AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.dni ILIKE ? OR u.email ILIKE ?)' : '';
+    const params: any[] = [];
+    if (workcenterId) params.push(workcenterId);
+    params.push(companyId);
+    if (search) params.push(...Array(4).fill(`%${search}%`));
+    return this.run<any[]>(
       q,
       `SELECT u.uuid, u.email, u.active, u.created_at,
               r.name AS role,
@@ -272,24 +280,31 @@ export class UserRepository {
        FROM users u
        JOIN roles r ON r.id = u.role_id
        LEFT JOIN profiles p ON p.user_id = u.id
+       ${joinWorkcenter}
        WHERE u.company_id = ?
+       ${searchClause}
        ORDER BY u.created_at DESC`,
-      [companyId],
+      params,
     );
   }
 
   async findWorkcenterIdsByUserId(userId: number): Promise<number[]> {
-    const rows = await this.db.query<RowDataPacket[]>(
+    const rows = await this.db.query<any[]>(
       'SELECT workcenter_id FROM user_workcenters WHERE user_id = ?',
       [userId],
     );
     return rows.map((r) => r['workcenter_id'] as number);
   }
 
-  async findByWorkcenterIds(workcenterIds: number[]): Promise<RowDataPacket[]> {
+  async findByWorkcenterIds(workcenterIds: number[], search?: string, workcenterId?: number): Promise<any[]> {
     if (workcenterIds.length === 0) return [];
     const placeholders = workcenterIds.map(() => '?').join(', ');
-    return this.db.query<RowDataPacket[]>(
+    const workcenterClause = workcenterId ? 'AND uw.workcenter_id = ?' : '';
+    const searchClause = search ? 'AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.dni ILIKE ? OR u.email ILIKE ?)' : '';
+    const params: any[] = [...workcenterIds];
+    if (workcenterId) params.push(workcenterId);
+    if (search) params.push(...Array(4).fill(`%${search}%`));
+    return this.db.query<any[]>(
       `SELECT DISTINCT u.uuid, u.email, u.active, u.created_at,
               r.name AS role,
               p.first_name, p.last_name, p.phone,
@@ -300,15 +315,17 @@ export class UserRepository {
        LEFT JOIN profiles p ON p.user_id = u.id
        JOIN user_workcenters uw ON uw.user_id = u.id
        WHERE uw.workcenter_id IN (${placeholders})
+       ${workcenterClause}
+       ${searchClause}
        ORDER BY u.created_at DESC`,
-      workcenterIds,
+      params,
     );
   }
 
   async sharesWorkcenterWithUser(targetUserId: number, managerWorkcenterIds: number[]): Promise<boolean> {
     if (managerWorkcenterIds.length === 0) return false;
     const placeholders = managerWorkcenterIds.map(() => '?').join(', ');
-    const rows = await this.db.query<RowDataPacket[]>(
+    const rows = await this.db.query<any[]>(
       `SELECT 1 FROM user_workcenters WHERE user_id = ? AND workcenter_id IN (${placeholders}) LIMIT 1`,
       [targetUserId, ...managerWorkcenterIds],
     );
@@ -318,30 +335,30 @@ export class UserRepository {
   async findIdsByUuids(uuids: string[], q?: QueryRunner): Promise<{ id: number; uuid: string }[]> {
     if (uuids.length === 0) return [];
     const placeholders = uuids.map(() => '?').join(', ');
-    return this.run<RowDataPacket[]>(q, `SELECT id, uuid FROM users WHERE uuid IN (${placeholders})`, uuids) as any;
+    return this.run<{ id: number; uuid: string }[]>(q, `SELECT id, uuid FROM users WHERE uuid IN (${placeholders})`, uuids);
   }
 
   async findOwnersByCompanyId(companyId: number): Promise<{ id: number }[]> {
-    return this.db.query<RowDataPacket[]>(
-      `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.company_id = ? AND r.name = 'Owner' AND u.active = 1`,
+    return this.db.query<{ id: number }[]>(
+      `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE u.company_id = ? AND r.name = 'Owner' AND u.active = true`,
       [companyId],
-    ) as any;
+    );
   }
 
   async findWorkcentersByUserId(userId: number): Promise<{ workcenter_id: number; company_id: number }[]> {
-    return this.db.query<RowDataPacket[]>(
+    return this.db.query<{ workcenter_id: number; company_id: number }[]>(
       `SELECT uw.workcenter_id, w.company_id FROM user_workcenters uw JOIN workcenters w ON w.id = uw.workcenter_id WHERE uw.user_id = ?`,
       [userId],
-    ) as any;
+    );
   }
 
   async findUsersInWorkcenter(workcenterIds: number[], q?: QueryRunner): Promise<{ user_id: number }[]> {
     if (workcenterIds.length === 0) return [];
     const placeholders = workcenterIds.map(() => '?').join(', ');
-    return this.run<RowDataPacket[]>(
+    return this.run<{ user_id: number }[]>(
       q,
       `SELECT DISTINCT user_id FROM user_workcenters WHERE workcenter_id IN (${placeholders})`,
       workcenterIds,
-    ) as any;
+    );
   }
 }

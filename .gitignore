@@ -21,6 +21,4 @@ error.log
 
 # Dist
 dist/
-test_parapostman.md
-arquitecturas.md
-duda.md
+*.md
