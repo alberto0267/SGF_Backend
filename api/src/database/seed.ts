@@ -3,7 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
 const SA1_EMAIL    = process.env.SUPERADMIN_1_EMAIL    ?? 'alberto@sgf.com';
-const SA1_PASSWORD = process.env.SUPERADMIN_1_PASSWORD ?? 'Alberto123!';
+const SA1_PASSWORD = process.env.SUPERADMIN_1_PASSWORD ?? 'xK9mQp2vL8nR4wZ6tY1cB3fH7!';
 const SA2_EMAIL    = process.env.SUPERADMIN_2_EMAIL    ?? 'backup@sgf.com';
 const SA2_PASSWORD = process.env.SUPERADMIN_2_PASSWORD ?? 'Backup2Dev123!';
 
